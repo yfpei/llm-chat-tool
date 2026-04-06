@@ -1,3 +1,6 @@
+import pytest
+from cryptography.fernet import InvalidToken
+
 from app.utils.crypto import encrypt, decrypt
 
 
@@ -18,6 +21,5 @@ def test_encrypt_produces_different_output():
 
 
 def test_decrypt_invalid_token():
-    import pytest
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidToken):
         decrypt("not-a-valid-token")
