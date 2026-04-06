@@ -21,20 +21,21 @@ class ApiKey(Base):
     is_valid = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    conversations = relationship("Conversation", back_populates="api_key")
+    conversations = relationship("Conversation", back_populates="api_key_rel")
 
 
 class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    title = Column(String(200), nullable=False)
-    api_key_id = Column(Integer, ForeignKey("api_keys.id"), nullable=False)
+    title = Column(String(200), default="新会话")
+    api_key_id = Column(Integer, ForeignKey("api_keys.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    api_key = relationship("ApiKey", back_populates="conversations")
-    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
+    api_key_rel = relationship("ApiKey", back_populates="conversations")
+    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan",
+                            order_by="Message.created_at")
 
 
 class Message(Base):
