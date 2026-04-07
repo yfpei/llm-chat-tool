@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
-from app.routers import keys, conversations
+from app.routers import keys, conversations, chat
 
 
 @asynccontextmanager
@@ -31,3 +31,4 @@ async def health_check():
 
 app.include_router(keys.router)
 app.include_router(conversations.router)
+app.include_router(chat.router)

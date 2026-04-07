@@ -1,19 +1,19 @@
-import tiktoken
-
-
 def count_tokens(messages: list[dict], provider: str) -> int:
-    """Count tokens for a list of messages. Uses tiktoken for both providers."""
+    """
+    Estimate token count for messages using character-based approximation.
+    Roughly 4 characters per token for English text.
+    """
     if not messages:
         return 0
-
-    # Use cl100k_base encoding (works for GPT-4, Claude approximation)
-    encoding = tiktoken.get_encoding("cl100k_base")
 
     total = 0
     for msg in messages:
         # Each message has overhead tokens (role, formatting)
         total += 4  # approximate overhead per message
-        total += len(encoding.encode(msg.get("content", "")))
-        total += len(encoding.encode(msg.get("role", "")))
+        content = msg.get("content", "")
+        role = msg.get("role", "")
+        # Approximate: 4 chars = 1 token
+        total += len(content) // 4
+        total += len(role) // 4
     total += 2  # conversation overhead
     return total
