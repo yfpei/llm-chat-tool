@@ -8,7 +8,12 @@ from app.services.llm.base import LLMProvider
 class AnthropicProvider(LLMProvider):
     def __init__(self, base_url: str, api_key: str, model: str):
         super().__init__(base_url, api_key, model)
-        self.client = anthropic.AsyncAnthropic(base_url=base_url, api_key=api_key)
+        # Anthropic SDK 期望 base_url 不含 /v1，如 https://api.anthropic.com
+        # 如果用户传了 /v1 结尾的 URL，去掉它
+        clean_url = base_url.rstrip("/")
+        if clean_url.endswith("/v1"):
+            clean_url = clean_url[:-3]
+        self.client = anthropic.AsyncAnthropic(base_url=clean_url, api_key=api_key)
 
     async def chat_stream(self, messages: list[dict]) -> AsyncGenerator[str, None]:
         # Anthropic requires separating system message

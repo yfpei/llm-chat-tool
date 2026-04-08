@@ -89,21 +89,39 @@ async def verify_key_connectivity(provider: str, base_url: str, api_key: str, mo
     """Verify that an API key is valid by making a test request."""
     import httpx
 
+    base_url = base_url.rstrip("/")
+
     try:
         if provider == "openai":
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
+            # 用 chat/completions 验证，兼容所有 OpenAI 协议代理
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    f"{base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "max_tokens": 1,
+                        "messages": [{"role": "user", "content": "hi"}],
+                    },
                 )
                 if resp.status_code == 200:
                     return True, "连接成功"
-                return False, f"验证失败: HTTP {resp.status_code}"
+                body = resp.text[:200]
+                return False, f"验证失败: HTTP {resp.status_code} - {body}"
 
         elif provider == "anthropic":
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            # 智能拼接路径，避免 /v1/v1/messages
+            if base_url.endswith("/v1"):
+                messages_url = f"{base_url}/messages"
+            else:
+                messages_url = f"{base_url}/v1/messages"
+
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(
-                    f"{base_url}/v1/messages",
+                    messages_url,
                     headers={
                         "x-api-key": api_key,
                         "anthropic-version": "2023-06-01",
@@ -117,14 +135,15 @@ async def verify_key_connectivity(provider: str, base_url: str, api_key: str, mo
                 )
                 if resp.status_code == 200:
                     return True, "连接成功"
-                return False, f"验证失败: HTTP {resp.status_code}"
+                body = resp.text[:200]
+                return False, f"验证失败: HTTP {resp.status_code} - {body}"
 
         return False, f"未知的 provider: {provider}"
 
     except httpx.ConnectError:
-        return False, "无法连接到服务器"
+        return False, "无法连接到服务器，请检查 Base URL 是否正确"
     except httpx.TimeoutException:
-        return False, "连接超时"
+        return False, "连接超时，请检查网络或 Base URL"
     except Exception as e:
         return False, f"验证出错: {str(e)}"
 
