@@ -7,8 +7,14 @@
 
       <div class="settings-body">
         <div class="section">
-          <div class="section-label">{{ editingId ? '编辑 Key' : '添加 Key' }}</div>
-          <div class="form-card">
+          <div class="section-label">
+            <span v-if="editingId" class="edit-label">
+              编辑 Key
+              <span class="edit-name">「{{ editingName }}」</span>
+            </span>
+            <span v-else>添加 Key</span>
+          </div>
+          <div class="form-card" :class="{ 'form-card-editing': editingId }" ref="formCardRef">
             <n-form :model="form" label-placement="top" size="medium">
               <n-form-item label="名称" :show-feedback="false">
                 <n-input v-model:value="form.name" placeholder="如：我的 OpenAI Key" />
@@ -46,7 +52,7 @@
               </n-form-item>
               <div class="form-btns">
                 <n-button type="primary" :loading="saving" @click="handleSubmit" class="submit-btn">
-                  {{ editingId ? '保存' : '添加并验证' }}
+                  {{ editingId ? '保存修改' : '添加并验证' }}
                 </n-button>
                 <n-button v-if="editingId" @click="cancelEdit">取消</n-button>
               </div>
@@ -59,7 +65,7 @@
           <div v-if="store.apiKeys.length === 0" class="empty-keys">
             暂无配置，请添加一个 API Key
           </div>
-          <div v-for="key in store.apiKeys" :key="key.id" class="key-card">
+          <div v-for="key in store.apiKeys" :key="key.id" class="key-card" :class="{ 'key-card-editing': key.id === editingId }">
             <div class="key-main">
               <div class="key-top">
                 <span class="key-name">{{ key.name }}</span>
@@ -105,6 +111,8 @@ const message = useMessage()
 const saving = ref(false)
 const verifyingId = ref<number | null>(null)
 const editingId = ref<number | null>(null)
+const editingName = ref('')
+const formCardRef = ref<HTMLElement | null>(null)
 
 const providerOptions = [
   { label: 'OpenAI', value: 'openai' },
@@ -143,10 +151,12 @@ function resetForm() {
   form.enable_thinking = true
   form.is_xinghuo_x1 = false
   editingId.value = null
+  editingName.value = ''
 }
 
 function startEdit(key: ApiKeyConfig) {
   editingId.value = key.id
+  editingName.value = key.name
   form.name = key.name
   form.provider = key.provider
   form.base_url = key.base_url
@@ -155,6 +165,8 @@ function startEdit(key: ApiKeyConfig) {
   form.max_context_tokens = key.max_context_tokens
   form.enable_thinking = key.enable_thinking
   form.is_xinghuo_x1 = key.is_xinghuo_x1
+  // 滚动到表单区域
+  formCardRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function cancelEdit() {
@@ -247,11 +259,27 @@ async function handleVerify(id: number) {
   letter-spacing: 0.5px;
 }
 
+.edit-label {
+  color: #5b7cfa;
+}
+
+.edit-name {
+  font-weight: 600;
+  color: #3c5de6;
+}
+
 .form-card {
   background: #f9f9fb;
   border: 1px solid #eeeef2;
   border-radius: 12px;
   padding: 12px 20px 10px;
+  transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
+}
+
+.form-card-editing {
+  background: #f0f4ff;
+  border-color: #5b7cfa;
+  box-shadow: 0 0 0 1px rgba(91, 124, 250, 0.15);
 }
 
 .form-card :deep(.n-form-item) {
@@ -296,6 +324,13 @@ async function handleVerify(id: number) {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
+}
+
+.key-card-editing {
+  background: #f0f4ff;
+  border-color: #5b7cfa;
+  box-shadow: 0 0 0 2px rgba(91, 124, 250, 0.12);
 }
 
 .key-main {
