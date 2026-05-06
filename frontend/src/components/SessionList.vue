@@ -26,7 +26,7 @@
                    @keyup.enter="finishEditConv(conv.id)"
                    @click.stop />
         </div>
-        <n-popconfirm @positive-click="store.removeConversation(conv.id)" :negative-text="null">
+        <n-popconfirm @positive-click="store.removeConversation(conv.id)">
           <template #trigger>
             <button class="delete-btn" @click.stop title="删除">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -62,7 +62,7 @@
                    @keyup.enter="finishEditTask(task.id)"
                    @click.stop />
         </div>
-        <n-popconfirm @positive-click="batchStore.removeBatchTask(task.id)" :negative-text="null">
+        <n-popconfirm @positive-click="batchStore.removeBatchTask(task.id)">
           <template #trigger>
             <button class="delete-btn" @click.stop title="删除">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -78,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { NPopconfirm, NInput } from 'naive-ui'
 import { useChatStore } from '../stores/chat'
 import { useBatchStore } from '../stores/batch'
@@ -100,6 +100,11 @@ function handleConvClick(conv: Conversation) {
   if (store.currentConversation?.id === conv.id) {
     editingConvId.value = conv.id
     editConvTitle.value = conv.title
+    nextTick(() => {
+      const inp = document.querySelector<HTMLInputElement>('.session-item.active input')
+      inp?.focus()
+      inp?.select()
+    })
   } else {
     store.selectConversation(conv.id)
   }
@@ -122,6 +127,11 @@ function handleTaskClick(task: BatchTask) {
   if (batchStore.currentTask?.id === task.id) {
     editingTaskId.value = task.id
     editTaskTitle.value = task.title
+    nextTick(() => {
+      const inp = document.querySelector<HTMLInputElement>('.session-item.active input')
+      inp?.focus()
+      inp?.select()
+    })
   } else {
     batchStore.selectBatchTask(task.id)
   }

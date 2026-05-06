@@ -72,6 +72,23 @@ export interface PreviewRow {
   cells: Record<string, string>
 }
 
+export interface FilterCondition {
+  field: string
+  operator: 'contains' | 'equals' | 'gt' | 'lt'
+  value: string
+}
+
+export interface FilterGroup {
+  logic: 'and' | 'or'
+  conditions: FilterCondition[]
+}
+
+export interface FilterConfig {
+  top_n?: number | null
+  groups: FilterGroup[]
+  logic: 'and' | 'or'
+}
+
 export interface BatchRunConfig {
   task_id: string
   file_id: string
@@ -82,6 +99,7 @@ export interface BatchRunConfig {
   concurrency: number
   strip_thinking: boolean
   parse_json: boolean
+  filter?: FilterConfig | null
 }
 
 export interface BatchEvent {

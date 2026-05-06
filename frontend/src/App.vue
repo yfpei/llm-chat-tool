@@ -12,7 +12,7 @@
             <span class="brand-text">LLM Chat</span>
           </div>
           <div class="sidebar-new-chat">
-            <n-button block @click="handleNewChat" size="large" class="new-chat-btn">
+            <n-button block type="primary" @click="handleNewChat" size="large" class="new-chat-btn">
               <template #icon>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -95,6 +95,9 @@ const themeOverrides = {
   Button: {
     borderRadiusMedium: '8px',
     fontSizeMedium: '14px',
+    colorPrimary: '#6366f1',
+    colorHoverPrimary: '#5558e6',
+    colorPressedPrimary: '#4a4edb',
   },
   Drawer: {
     borderRadius: '0',
@@ -220,21 +223,14 @@ body {
 }
 
 .new-chat-btn {
-  --n-color: #6366f1 !important;
-  --n-color-hover: #5558e6 !important;
-  --n-color-pressed: #4a4edb !important;
-  --n-text-color: #fff !important;
-  --n-font-weight: 600 !important;
-  border: none !important;
-  height: 42px !important;
-  font-size: 14px !important;
-  border-radius: 10px !important;
-  transition: all 0.2s ease !important;
+  height: 42px;
+  font-size: 14px;
+  border-radius: 10px;
 }
 
 .new-chat-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(16, 163, 127, 0.3);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
 }
 
 /* ── Sidebar footer ──────────────────────── */

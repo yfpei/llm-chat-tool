@@ -4,14 +4,14 @@ import shutil
 import uuid
 
 import openpyxl
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
 from app.models import BatchTask
-from app.schemas import BatchUploadResponse, BatchRunRequest
+from app.schemas import BatchUploadResponse, BatchRunRequest, FilterConfig
 from app.services import batch_service
 
 router = APIRouter(prefix="/api/batch", tags=["batch"])
@@ -139,6 +139,7 @@ async def run_batch(req: BatchRunRequest, db: AsyncSession = Depends(get_db)):
             db=db,
             strip_thinking=req.strip_thinking,
             parse_json=req.parse_json,
+            filter_config=req.filter.model_dump() if req.filter else None,
         ):
             yield {
                 "event": "message",
@@ -148,12 +149,86 @@ async def run_batch(req: BatchRunRequest, db: AsyncSession = Depends(get_db)):
     return EventSourceResponse(event_generator())
 
 
+@router.post("/{task_id}/filter-preview")
+async def filter_preview_endpoint(task_id: str, filter_config: FilterConfig | None = Body(None)):
+    from app.database import async_session
+    async with async_session() as db:
+        task = await db.get(BatchTask, task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        file_id = task.file_id
+
+    try:
+        return batch_service.filter_preview(
+            file_id=file_id,
+            filter_config=filter_config.model_dump() if filter_config else None,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{task_id}/filter-download")
+async def download_filtered(task_id: str, filter_config: FilterConfig | None = Body(None)):
+    from app.database import async_session
+    async with async_session() as db:
+        task = await db.get(BatchTask, task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        file_id = task.file_id
+        filename = task.filename
+
+    original_path = os.path.join(batch_service.UPLOAD_DIR, f"{file_id}_original.xlsx")
+    file_path = original_path if os.path.exists(original_path) else os.path.join(batch_service.UPLOAD_DIR, f"{file_id}.xlsx")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+
+    wb = openpyxl.load_workbook(file_path, read_only=True)
+    ws = wb.active
+    header_row = list(next(ws.iter_rows(min_row=1, max_row=1, values_only=True), []))
+    headers = [str(c) if c is not None else "" for c in header_row]
+
+    inputs: list[tuple[int, dict[str, str]]] = []
+    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        row_data: dict[str, str] = {}
+        for ci, val in enumerate(row):
+            if ci < len(headers) and val is not None:
+                row_data[headers[ci]] = str(val)
+        inputs.append((row_idx, row_data))
+    wb.close()
+
+    fc = filter_config.model_dump() if filter_config else None
+    filtered = batch_service.apply_filters(inputs, fc)
+
+    # Build output workbook with only filtered rows
+    out_path = os.path.join(batch_service.UPLOAD_DIR, f"{file_id}_filtered.xlsx")
+    wb_out = openpyxl.Workbook()
+    ws_out = wb_out.active
+    for ci, col_name in enumerate(headers, start=1):
+        ws_out.cell(row=1, column=ci, value=col_name)
+    for out_row, (_, row_data) in enumerate(filtered, start=2):
+        for ci, col_name in enumerate(headers, start=1):
+            ws_out.cell(row=out_row, column=ci, value=row_data.get(col_name, ""))
+    wb_out.save(out_path)
+    wb_out.close()
+
+    name, _ = os.path.splitext(filename)
+    download_name = f"{name}_筛选结果.xlsx"
+    return FileResponse(
+        path=out_path,
+        filename=download_name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @router.get("/{task_id}/download")
 async def download_result(task_id: str, db: AsyncSession = Depends(get_db)):
     task = await db.get(BatchTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    result_path = os.path.join(batch_service.UPLOAD_DIR, f"{task.file_id}_result.xlsx")
     file_path = os.path.join(batch_service.UPLOAD_DIR, f"{task.file_id}.xlsx")
+    if os.path.exists(result_path):
+        file_path = result_path
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="结果文件不存在")
     name, ext = os.path.splitext(task.filename)

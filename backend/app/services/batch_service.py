@@ -198,6 +198,119 @@ def parse_json_from_text(text: str) -> dict | None:
     return result
 
 
+def _eval_condition(val: str, op: str, cv: str) -> bool:
+    if op == "contains":
+        return cv in val
+    elif op == "equals":
+        return val == cv
+    elif op == "gt":
+        try:
+            return float(val) > float(cv)
+        except (ValueError, TypeError):
+            return False
+    elif op == "lt":
+        try:
+            return float(val) < float(cv)
+        except (ValueError, TypeError):
+            return False
+    return False
+
+
+def apply_filters(
+    inputs: list[tuple[int, dict[str, str]]],
+    filter_config: dict | None,
+) -> list[tuple[int, dict[str, str]]]:
+    """Apply filter conditions organised in groups. Pure function, no side effects.
+
+    Each group combines its conditions with its own AND/OR logic.
+    Groups are then combined with the top-level logic.
+    Example: (A AND B) OR (C AND D) → two groups (both "and"), group_logic="or".
+    """
+    if not filter_config:
+        return inputs
+
+    if filter_config.get("top_n"):
+        inputs = inputs[:int(filter_config["top_n"])]
+
+    groups = filter_config.get("groups") or []
+    if not groups:
+        return inputs
+
+    group_logic = filter_config.get("logic", "and")
+
+    filtered: list[tuple[int, dict[str, str]]] = []
+    for row_idx, row_data in inputs:
+        group_results: list[bool] = []
+        for group in groups:
+            conditions = group.get("conditions") or []
+            if not conditions:
+                group_results.append(True)
+                continue
+            gl = group.get("logic", "and")
+            cond_results = [
+                _eval_condition(row_data.get(c["field"], ""), c["operator"], c["value"])
+                for c in conditions
+            ]
+            group_results.append(any(cond_results) if gl == "or" else all(cond_results))
+
+        if group_logic == "or":
+            if any(group_results):
+                filtered.append((row_idx, row_data))
+        else:
+            if all(group_results):
+                filtered.append((row_idx, row_data))
+    return filtered
+
+
+def filter_preview(
+    file_id: str,
+    filter_config: dict | None = None,
+    input_columns: list[str] | None = None,
+) -> dict:
+    """Apply filters to the full dataset and return count + top-10 preview."""
+    ensure_upload_dir()
+    file_path = os.path.join(UPLOAD_DIR, f"{file_id}.xlsx")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError("文件不存在，请重新上传")
+
+    wb = openpyxl.load_workbook(file_path, read_only=True)
+    ws = wb.active
+    if not ws:
+        return {"total_before": 0, "total_after": 0, "preview": [], "columns": []}
+
+    header_row = list(next(ws.iter_rows(min_row=1, max_row=1, values_only=True), []))
+    headers = [str(c) if c is not None else "" for c in header_row]
+
+    inputs: list[tuple[int, dict[str, str]]] = []
+    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        row_data: dict[str, str] = {}
+        for ci, val in enumerate(row):
+            if ci < len(headers) and val is not None:
+                row_data[headers[ci]] = str(val)
+        if not input_columns or any(col_name in row_data for col_name in input_columns):
+            inputs.append((row_idx, row_data))
+
+    wb.close()
+
+    total_before = len(inputs)
+    filtered = apply_filters(inputs, filter_config)
+    total_after = len(filtered)
+
+    preview = []
+    for row_idx, row_data in filtered[:10]:
+        cells = {}
+        for col_name in headers:
+            text = row_data.get(col_name, "")
+            cells[col_name] = text[:50] + ("..." if len(text) > 50 else "")
+        preview.append({"row": row_idx, "cells": cells})
+
+    return {
+        "total_before": total_before,
+        "total_after": total_after,
+        "preview": preview,
+        "columns": headers,
+    }
+
 async def run_batch(
     task_id: str,
     file_id: str,
@@ -209,6 +322,7 @@ async def run_batch(
     db: AsyncSession,
     strip_thinking: bool = False,
     parse_json: bool = False,
+    filter_config: dict | None = None,
 ) -> AsyncGenerator[dict, None]:
     ensure_upload_dir()
     file_path = os.path.join(UPLOAD_DIR, f"{file_id}.xlsx")
@@ -232,29 +346,36 @@ async def run_batch(
     header_row = list(next(ws.iter_rows(min_row=1, max_row=1, values_only=True)))
     headers = [str(c) if c is not None else "" for c in header_row]
 
-    # Build column index map for all input columns
-    col_indices: dict[str, int] = {}
+    # Build column maps: all columns for filtering, input columns for substitution
+    all_col_indices: dict[str, int] = {}
+    for col_name in headers:
+        all_col_indices[col_name] = headers.index(col_name)
+
     for col_name in input_columns:
-        try:
-            col_indices[col_name] = headers.index(col_name)
-        except ValueError:
+        if col_name not in all_col_indices:
             yield {"type": "error", "content": f"列 '{col_name}' 不存在"}
             wb.close()
             return
 
-    # Build inputs: (row_idx, {col_name: cell_value, ...})
+    # Build inputs with ALL columns for filtering
     inputs: list[tuple[int, dict[str, str]]] = []
     for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         row_data: dict[str, str] = {}
-        for col_name, col_idx in col_indices.items():
+        for col_name, col_idx in all_col_indices.items():
             if col_idx < len(row) and row[col_idx] is not None:
                 row_data[col_name] = str(row[col_idx])
-        if row_data:
+        if any(col_name in row_data for col_name in input_columns):
             inputs.append((row_idx, row_data))
 
+    # Apply row filters
+    total_before = len(inputs)
+    inputs = apply_filters(inputs, filter_config)
     total = len(inputs)
     if total == 0:
-        yield {"type": "error", "content": "输入列无数据"}
+        if total_before > 0 and filter_config:
+            yield {"type": "error", "content": "筛选后无匹配数据，请调整筛选条件"}
+        else:
+            yield {"type": "error", "content": "输入列无数据"}
         wb.close()
         return
 
@@ -288,7 +409,7 @@ async def run_batch(
         use_native_thinking = False
 
     def build_input_label(row_data: dict[str, str]) -> str:
-        return "; ".join(f"{k}: {v}" for k, v in row_data.items())
+        return "; ".join(f"{k}: {v}" for k, v in row_data.items() if k in input_columns)
 
     async def process_one(row_idx: int, row_data: dict[str, str]):
         nonlocal completed
@@ -371,33 +492,45 @@ async def run_batch(
                     task.progress_completed = completed
                     await db.commit()
 
-    # Write all results to Excel
-    wb = openpyxl.load_workbook(file_path)
-    ws = wb.active
+    # Write results to a new Excel with only filtered rows
+    out_path = file_path.replace(".xlsx", "_result.xlsx")
+    wb_out = openpyxl.Workbook()
+    ws_out = wb_out.active
 
     # Determine JSON field columns if parse_json is enabled
     json_field_columns: dict[str, int] = {}
+    parsed_field_names: list[str] = []
     if parse_json and parsed_fields:
         all_fields: set[str] = set()
         for fields in parsed_fields.values():
             all_fields.update(fields.keys())
-        sorted_fields = sorted(all_fields)
-        next_col = output_col_idx + 1
-        for field in sorted_fields:
-            ws.cell(row=1, column=next_col, value=field)
-            json_field_columns[field] = next_col
-            next_col += 1
+        parsed_field_names = sorted(all_fields)
 
-    # Write data rows
-    for row_idx, text in results.items():
-        ws.cell(row=row_idx, column=output_col_idx, value=text)
-        if row_idx in parsed_fields:
-            for field, value in parsed_fields[row_idx].items():
-                if field in json_field_columns:
-                    ws.cell(row=row_idx, column=json_field_columns[field], value=value)
+    # Write header row: original headers + output column + json field columns
+    for ci, col_name in enumerate(headers, start=1):
+        ws_out.cell(row=1, column=ci, value=col_name)
+    ws_out.cell(row=1, column=len(headers) + 1, value=output_column_name)
+    next_col = len(headers) + 2
+    for field in parsed_field_names:
+        ws_out.cell(row=1, column=next_col, value=field)
+        json_field_columns[field] = next_col
+        next_col += 1
 
-    wb.save(file_path)
-    wb.close()
+    # Write data rows (only filtered/processed rows, in original row order)
+    output_row = 2
+    for row_idx, row_data in inputs:
+        for ci, col_name in enumerate(headers, start=1):
+            ws_out.cell(row=output_row, column=ci, value=row_data.get(col_name, ""))
+        if row_idx in results:
+            ws_out.cell(row=output_row, column=len(headers) + 1, value=results[row_idx])
+            if row_idx in parsed_fields:
+                for field, value in parsed_fields[row_idx].items():
+                    if field in json_field_columns:
+                        ws_out.cell(row=output_row, column=json_field_columns[field], value=value)
+        output_row += 1
+
+    wb_out.save(out_path)
+    wb_out.close()
 
     # Mark task completed
     task = await db.get(BatchTask, task_id)
@@ -406,7 +539,7 @@ async def run_batch(
         task.progress_completed = total
         await db.commit()
 
-    _batch_tasks[task_id] = {"file_path": file_path, "filename": f"result_{file_id}.xlsx"}
+    _batch_tasks[task_id] = {"file_path": out_path, "filename": f"result_{file_id}.xlsx"}
     yield {"type": "done", "task_id": task_id}
 
 

@@ -14,6 +14,14 @@ from app.services.batch_service import UPLOAD_DIR
 router = APIRouter(prefix="/api/batch-tasks", tags=["batch-tasks"])
 
 
+def _resolve_file_path(file_id: str) -> str:
+    """Return the best file to read: _result.xlsx if it exists, otherwise .xlsx."""
+    result_path = os.path.join(UPLOAD_DIR, f"{file_id}_result.xlsx")
+    if os.path.exists(result_path):
+        return result_path
+    return os.path.join(UPLOAD_DIR, f"{file_id}.xlsx")
+
+
 @router.get("", response_model=list[BatchTaskResponse])
 async def list_batch_tasks(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -48,7 +56,7 @@ async def get_task_preview(task_id: str, db: AsyncSession = Depends(get_db)):
     task = await db.get(BatchTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    file_path = os.path.join(UPLOAD_DIR, f"{task.file_id}.xlsx")
+    file_path = _resolve_file_path(task.file_id)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="文件不存在")
     info = batch_service.parse_upload(file_path)
@@ -60,7 +68,7 @@ async def get_task_results(task_id: str, db: AsyncSession = Depends(get_db)):
     task = await db.get(BatchTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    file_path = os.path.join(UPLOAD_DIR, f"{task.file_id}.xlsx")
+    file_path = _resolve_file_path(task.file_id)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="文件不存在")
 
@@ -133,12 +141,10 @@ async def delete_batch_task(task_id: str, db: AsyncSession = Depends(get_db)):
     task = await db.get(BatchTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    file_path = os.path.join(UPLOAD_DIR, f"{task.file_id}.xlsx")
-    if os.path.exists(file_path):
-        os.remove(file_path)
-    original_path = file_path.replace(".xlsx", "_original.xlsx")
-    if os.path.exists(original_path):
-        os.remove(original_path)
+    for suffix in (".xlsx", "_original.xlsx", "_result.xlsx"):
+        p = os.path.join(UPLOAD_DIR, f"{task.file_id}{suffix}")
+        if os.path.exists(p):
+            os.remove(p)
     await db.delete(task)
     await db.commit()
     return {"message": "deleted"}

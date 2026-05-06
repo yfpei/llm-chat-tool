@@ -91,6 +91,24 @@ class ChatRequest(BaseModel):
 
 
 # --- Batch Schemas ---
+class FilterCondition(BaseModel):
+    field: str
+    operator: str  # "contains" | "equals" | "gt" | "lt"
+    value: str
+
+
+class FilterGroup(BaseModel):
+    logic: str = "and"  # how conditions within this group combine
+    conditions: list[FilterCondition] = []
+
+
+class FilterConfig(BaseModel):
+    top_n: int | None = None
+    groups: list[FilterGroup] = []
+    logic: str = "and"  # how groups combine
+
+
+
 class BatchUploadResponse(BaseModel):
     task_id: str
     file_id: str
@@ -111,6 +129,7 @@ class BatchRunRequest(BaseModel):
     concurrency: int = 3
     strip_thinking: bool = False
     parse_json: bool = False
+    filter: FilterConfig | None = None
 
 
 # --- Batch Task Schemas ---

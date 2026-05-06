@@ -84,6 +84,40 @@ export function runBatch(
   return controller
 }
 
+export async function filterPreview(taskId: string, filter: object): Promise<{ total_before: number; total_after: number; preview: any[]; columns: string[] }> {
+  const res = await fetch(`/api/batch/${taskId}/filter-preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(filter),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || '筛选失败')
+  }
+  return res.json()
+}
+
+export async function filterDownload(taskId: string, filter: object, filename: string): Promise<void> {
+  const res = await fetch(`/api/batch/${taskId}/filter-download`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(filter),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || '下载失败')
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 export function downloadUrl(taskId: string): string {
   return `/api/batch/${taskId}/download`
 }
