@@ -11,7 +11,9 @@
 - **会话管理** — 创建、重命名、删除会话，完整消息历史记录
 - **上下文窗口管理** — 自动 Token 感知截断，确保不超出模型上下文限制
 - **思考模式** — 支持扩展思考（Anthropic）和推理模型
-- **批量处理** — 上传 Excel 文件，配置提示词，并发处理多行数据
+- **批量处理** — 上传 Excel/JSON/TXT 文件，配置提示词，并发处理多行数据
+- **数据筛选** — 支持条件组模型 `(A AND B) OR (C AND D)`、前 N 行限制、包含/等于/大于/小于操作符，可预览和下载筛选结果
+- **变量高亮** — Prompt 编辑器中 `{{变量}}` 内联彩色高亮，输入 `/` 快速选择列变量
 - **Markdown 渲染** — 助手回复支持丰富的 Markdown 格式渲染
 - **Docker 部署** — 使用 Docker Compose 一键部署
 
@@ -88,6 +90,8 @@ ENCRYPTION_KEY=$ENCRYPTION_KEY docker compose up -d
 6. 回复内容实时流式展示，支持 Markdown 渲染
 7. 使用 **Shift+Enter** 在输入框中换行
 8. 开启**思考模式**以启用扩展推理（部分模型支持）
+9. 批量处理：上传文件，配置筛选条件（可选），选择输入列，编写含 `{{列名}}` 占位符的 Prompt，点击开始跑批
+10. 在 Prompt 编辑器中输入 `/` 可快速弹出列变量下拉菜单
 
 ## 项目结构
 
@@ -175,8 +179,21 @@ model-web/
 ### 批量处理
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/batch/upload` | 上传 Excel 文件 |
-| POST | `/api/batch/run` | 启动批量处理 |
+| POST | `/api/batch/upload` | 上传 Excel/JSON/TXT 文件 |
+| POST | `/api/batch/run` | 启动批量处理（SSE 流） |
+| POST | `/api/batch/{id}/filter-preview` | 预览筛选结果 |
+| POST | `/api/batch/{id}/filter-download` | 下载筛选结果 Excel |
+| GET | `/api/batch/{id}/download` | 下载批量处理结果 Excel |
+
+### 批量任务管理
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/batch-tasks` | 获取所有批量任务 |
+| GET | `/api/batch-tasks/{id}` | 获取任务详情 |
+| PUT | `/api/batch-tasks/{id}` | 更新任务 |
+| DELETE | `/api/batch-tasks/{id}` | 删除任务及文件 |
+| GET | `/api/batch-tasks/{id}/preview` | 获取任务文件预览 |
+| GET | `/api/batch-tasks/{id}/results` | 获取任务结果 |
 
 ## 环境变量
 

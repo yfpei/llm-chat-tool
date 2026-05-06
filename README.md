@@ -9,7 +9,9 @@ A personal multi-turn LLM chat web application with a ChatGPT-like UI. Supports 
 - **Conversation management** — Create, rename, delete conversations with full message history
 - **Context window management** — Automatic token-aware truncation to stay within model context limits
 - **Thinking mode** — Support for extended thinking (Anthropic) and reasoning models
-- **Batch processing** — Upload Excel files, configure prompts, and process rows in parallel with concurrency control
+- **Batch processing** — Upload Excel/JSON/TXT files, configure prompts, and process rows in parallel with concurrency control
+- **Data filtering** — Filter rows before processing with condition groups supporting `(A AND B) OR (C AND D)` logic, top-N limit, contains/equals/gt/lt operators, and preview/download filtered results
+- **Prompt variable highlighting** — Inline `{{variable}}` color highlighting in the prompt editor with `/` slash-picker for quick column selection
 - **Markdown rendering** — Assistant responses rendered with rich Markdown support
 - **Docker support** — Single-command deployment with Docker Compose
 
@@ -86,6 +88,8 @@ Access at `http://localhost:8099`.
 6. Responses stream in real-time with Markdown rendering
 7. Use **Shift+Enter** for line breaks in the input box
 8. Toggle **Thinking mode** to enable extended reasoning (where supported)
+9. For batch processing: upload a file, configure filters (optional), select input columns, write a prompt with `{{column}}` placeholders, and run
+10. Type `/` in the prompt editor to quickly insert column variables from a dropdown
 
 ## Project Structure
 
@@ -173,8 +177,21 @@ model-web/
 ### Batch
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/batch/upload` | Upload Excel file |
-| POST | `/api/batch/run` | Start batch processing |
+| POST | `/api/batch/upload` | Upload Excel/JSON/TXT file |
+| POST | `/api/batch/run` | Start batch processing (SSE stream) |
+| POST | `/api/batch/{id}/filter-preview` | Preview filtered rows count and data |
+| POST | `/api/batch/{id}/filter-download` | Download filtered data as Excel |
+| GET | `/api/batch/{id}/download` | Download batch results as Excel |
+
+### Batch Tasks
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/batch-tasks` | List all batch tasks |
+| GET | `/api/batch-tasks/{id}` | Get batch task detail |
+| PUT | `/api/batch-tasks/{id}` | Update batch task |
+| DELETE | `/api/batch-tasks/{id}` | Delete batch task and files |
+| GET | `/api/batch-tasks/{id}/preview` | Get task file preview |
+| GET | `/api/batch-tasks/{id}/results` | Get task results from Excel |
 
 ## Environment Variables
 
