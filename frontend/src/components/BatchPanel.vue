@@ -189,12 +189,15 @@
               ref="textareaRef"
               v-model="config.prompt"
               class="prompt-textarea"
+              :class="{ 'is-composing': isComposing }"
               rows="15"
               placeholder="请根据以下内容回答：&#10;{{input}}"
               @scroll="onPromptScroll"
               @input="onPromptInput"
               @keydown="onPromptKeydown"
               @focus="onPromptFocus"
+              @compositionstart="isComposing = true"
+              @compositionend="isComposing = false"
             />
             <div v-if="showSlashPicker" class="slash-picker">
               <div
@@ -476,6 +479,7 @@ const canStart = computed(
 // ── Slash / variable picker ──────────────────────
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const promptTextareaRef = ref<HTMLElement | null>(null)
+const isComposing = ref(false)
 const showSlashPicker = ref(false)
 const slashStartPos = ref(-1)
 const slashQuery = ref('')
@@ -1266,6 +1270,11 @@ function download() {
 .prompt-textarea:focus {
   border-color: #6366f1;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Show real text during IME composition (拼音输入) */
+.prompt-textarea.is-composing {
+  color: #4b4b60;
 }
 
 .prompt-textarea::placeholder {
