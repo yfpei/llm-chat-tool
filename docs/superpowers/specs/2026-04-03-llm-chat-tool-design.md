@@ -222,7 +222,7 @@ data: {"type": "error", "content": "错误信息"}
 ## 项目结构
 
 ```
-llm-chat/
+model-web/                         # 项目根目录 (/mnt/d/zhcs/model-web)
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI 入口

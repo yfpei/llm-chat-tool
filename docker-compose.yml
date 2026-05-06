@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    image: llm-chat-tool:latest
+    ports:
+      - "8099:8099"
+    environment:
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

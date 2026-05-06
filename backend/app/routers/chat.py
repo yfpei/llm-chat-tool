@@ -5,12 +5,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.database import get_db
-from app.models import Message
+from app.database import get_db, async_session
+from app.models import Message, Conversation
 from app.schemas import ChatRequest
 from app.services.chat_service import get_conversation_with_key, truncate_messages
 from app.services.llm import create_provider
 from app.services.key_service import get_decrypted_key
+
+XINGHUO_THINKING_PROMPT = (
+    "你能够回答用户的各种问题，回答问题能够角度全面、表述专业、重点突出。"
+    "当前是慢思考模式，请你先深入剖析给出问题的关键要点与内在逻辑，生成思考过程，"
+    "再根据思考过程回答给出问题。"
+    "思考过程以<unused6>开头，在结尾处用<unused7>标注结束，"
+    "<unused7>后为基于思考过程的回答内容"
+)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -34,9 +42,18 @@ async def chat(conversation_id: str, req: ChatRequest, db: AsyncSession = Depend
     messages = [{"role": m.role, "content": m.content} for m in conv.messages]
     messages = truncate_messages(messages, api_key.max_context_tokens, api_key.provider)
 
+    # Thinking mode: for Xinghuo X1, inject the thinking prompt as a system message
+    # instead of using the provider's native thinking mechanism.
+    use_native_thinking = api_key.enable_thinking
+    if api_key.enable_thinking and api_key.is_xinghuo_x1:
+        messages.insert(0, {"role": "system", "content": XINGHUO_THINKING_PROMPT})
+        use_native_thinking = False
+
     # Create provider
     plaintext_key = get_decrypted_key(api_key)
-    provider = create_provider(api_key.provider, api_key.base_url, plaintext_key, api_key.model)
+    provider = create_provider(api_key.provider, api_key.base_url, plaintext_key, api_key.model, use_native_thinking)
+
+    user_content = req.content
 
     async def event_generator():
         full_response = ""
@@ -48,20 +65,28 @@ async def chat(conversation_id: str, req: ChatRequest, db: AsyncSession = Depend
                     "data": json.dumps({"type": "chunk", "content": chunk}),
                 }
 
-            # Save assistant message after streaming completes
-            assistant_msg = Message(
-                conversation_id=conversation_id,
-                role="assistant",
-                content=full_response,
-            )
-            db.add(assistant_msg)
-            conv.updated_at = datetime.utcnow()
+            async with async_session() as session:
+                assistant_msg = Message(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content=full_response,
+                )
+                session.add(assistant_msg)
 
-            # Auto-generate title from first exchange
-            if conv.title == "新会话" and full_response:
-                conv.title = req.content[:50]
+                conv_obj = await session.get(Conversation, conversation_id)
+                if conv_obj:
+                    conv_obj.updated_at = datetime.utcnow()
+                    if conv_obj.title == "新会话" and user_content:
+                        conv_obj.title = user_content[:10]
 
-            await db.commit()
+                await session.commit()
+
+            # 发送 usage 信息（如果有）
+            if provider.usage:
+                yield {
+                    "event": "message",
+                    "data": json.dumps({"type": "usage", "content": provider.usage}),
+                }
 
             yield {
                 "event": "message",

@@ -1,63 +1,90 @@
 <template>
-  <n-drawer v-model:show="store.showSettings" :width="500" placement="right">
-    <n-drawer-content title="API Key 设置">
-      <n-card title="添加 API Key" size="small" style="margin-bottom: 16px">
-        <n-form :model="form" label-placement="top">
-          <n-form-item label="名称">
-            <n-input v-model:value="form.name" placeholder="如：我的 OpenAI" />
-          </n-form-item>
-          <n-form-item label="协议类型">
-            <n-select v-model:value="form.provider" :options="providerOptions" @update:value="onProviderChange" />
-          </n-form-item>
-          <n-form-item label="Base URL">
-            <n-input v-model:value="form.base_url" placeholder="API 地址" />
-          </n-form-item>
-          <n-form-item label="API Key">
-            <n-input v-model:value="form.api_key" type="password" show-password-on="click" placeholder="输入 API Key" />
-          </n-form-item>
-          <n-form-item label="模型">
-            <n-input v-model:value="form.model" placeholder="如 gpt-4o 或 claude-sonnet-4-20250514" />
-          </n-form-item>
-          <n-form-item label="最大上下文 Token">
-            <n-input-number v-model:value="form.max_context_tokens" :min="1000" :step="10000" style="width: 100%" />
-          </n-form-item>
-          <n-button type="primary" block :loading="saving" @click="handleAdd">
-            添加并验证
-          </n-button>
-        </n-form>
-      </n-card>
+  <n-drawer v-model:show="store.showSettings" :width="480" placement="right">
+    <n-drawer-content>
+      <template #header>
+        <div class="drawer-title">API Key 设置</div>
+      </template>
 
-      <n-card title="已配置的 Key" size="small">
-        <div v-if="store.apiKeys.length === 0" style="color: #888; text-align: center; padding: 20px">
-          暂无配置
+      <div class="settings-body">
+        <div class="section">
+          <div class="section-label">{{ editingId ? '编辑 Key' : '添加 Key' }}</div>
+          <div class="form-card">
+            <n-form :model="form" label-placement="top" size="medium">
+              <n-form-item label="名称" :show-feedback="false">
+                <n-input v-model:value="form.name" placeholder="如：我的 OpenAI Key" />
+              </n-form-item>
+              <n-form-item label="协议类型" :show-feedback="false">
+                <n-select v-model:value="form.provider" :options="providerOptions" @update:value="onProviderChange" />
+              </n-form-item>
+              <n-form-item label="Base URL" :show-feedback="false">
+                <n-input v-model:value="form.base_url" placeholder="API 地址" />
+              </n-form-item>
+              <n-form-item label="API Key" :show-feedback="false">
+                <n-input v-model:value="form.api_key" type="password" show-password-on="click"
+                  :placeholder="editingId ? '留空则不修改' : '输入 API Key'" />
+              </n-form-item>
+              <n-form-item label="模型" :show-feedback="false">
+                <n-input v-model:value="form.model" placeholder="如 gpt-4o 或 claude-sonnet-4-20250514" />
+              </n-form-item>
+              <n-form-item label="最大上下文 Token" :show-feedback="false">
+                <n-input-number v-model:value="form.max_context_tokens" :min="1000" :step="10000" style="width: 100%" />
+              </n-form-item>
+              <n-form-item label="思考模式" :show-feedback="false">
+                <n-switch v-model:value="form.enable_thinking">
+                  <template #checked>开启</template>
+                  <template #unchecked>关闭</template>
+                </n-switch>
+              </n-form-item>
+              <n-form-item v-if="form.enable_thinking" label="星火 X1 慢思考" :show-feedback="false">
+                <n-switch v-model:value="form.is_xinghuo_x1">
+                  <template #checked>是</template>
+                  <template #unchecked>否</template>
+                </n-switch>
+                <template #feedback>
+                  <span class="think-hint">开启后将自动注入星火专用思考提示词，模型输出以 &lt;unused6&gt;...&lt;/unused7&gt; 格式返回</span>
+                </template>
+              </n-form-item>
+              <div class="form-btns">
+                <n-button type="primary" :loading="saving" @click="handleSubmit" class="submit-btn">
+                  {{ editingId ? '保存' : '添加并验证' }}
+                </n-button>
+                <n-button v-if="editingId" @click="cancelEdit">取消</n-button>
+              </div>
+            </n-form>
+          </div>
         </div>
-        <div v-for="key in store.apiKeys" :key="key.id" class="key-item">
-          <div class="key-info">
-            <div class="key-name">
-              {{ key.name }}
-              <n-tag :type="key.is_valid ? 'success' : 'error'" size="small">
-                {{ key.is_valid ? '已验证' : '未验证' }}
-              </n-tag>
-              <n-tag v-if="key.is_active" type="info" size="small">当前使用</n-tag>
+
+        <div class="section">
+          <div class="section-label">已配置的 Key ({{ store.apiKeys.length }})</div>
+          <div v-if="store.apiKeys.length === 0" class="empty-keys">
+            暂无配置，请添加一个 API Key
+          </div>
+          <div v-for="key in store.apiKeys" :key="key.id" class="key-card">
+            <div class="key-main">
+              <div class="key-top">
+                <span class="key-name">{{ key.name }}</span>
+                <n-tag :type="key.is_valid ? 'success' : 'error'" size="small" :bordered="false">
+                  {{ key.is_valid ? '已连接' : '未验证' }}
+                </n-tag>
+                <n-tag v-if="key.is_active" type="info" size="small" :bordered="false">使用中</n-tag>
+              </div>
+              <div class="key-detail">{{ key.provider }} · {{ key.model }}</div>
+              <div class="key-detail" v-if="key.base_url">{{ key.base_url }}</div>
             </div>
-            <div class="key-meta">{{ key.provider }} | {{ key.model }}</div>
-          </div>
-          <div class="key-actions">
-            <n-button text size="small" @click="store.setActiveKey(key.id)" :disabled="key.is_active">
-              激活
-            </n-button>
-            <n-button text size="small" @click="handleVerify(key.id)" :loading="verifyingId === key.id">
-              验证
-            </n-button>
-            <n-popconfirm @positive-click="store.removeKey(key.id)">
-              <template #trigger>
-                <n-button text size="small" type="error">删除</n-button>
-              </template>
-              确认删除？
-            </n-popconfirm>
+            <div class="key-actions">
+              <n-button text size="tiny" @click="startEdit(key)">编辑</n-button>
+              <n-button text size="tiny" @click="store.setActiveKey(key.id)" :disabled="key.is_active">激活</n-button>
+              <n-button text size="tiny" @click="handleVerify(key.id)" :loading="verifyingId === key.id">验证</n-button>
+              <n-popconfirm @positive-click="store.removeKey(key.id)">
+                <template #trigger>
+                  <n-button text size="tiny" type="error">删除</n-button>
+                </template>
+                确认删除此 Key？
+              </n-popconfirm>
+            </div>
           </div>
         </div>
-      </n-card>
+      </div>
     </n-drawer-content>
   </n-drawer>
 </template>
@@ -65,17 +92,19 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import {
-  NDrawer, NDrawerContent, NCard, NForm, NFormItem,
-  NInput, NInputNumber, NSelect, NButton, NTag, NPopconfirm,
+  NDrawer, NDrawerContent, NForm, NFormItem,
+  NInput, NInputNumber, NSelect, NButton, NTag, NPopconfirm, NSwitch,
   useMessage,
 } from 'naive-ui'
 import { useChatStore } from '../stores/chat'
 import { verifyKey } from '../api/keys'
+import type { ApiKeyConfig } from '../types'
 
 const store = useChatStore()
 const message = useMessage()
 const saving = ref(false)
 const verifyingId = ref<number | null>(null)
+const editingId = ref<number | null>(null)
 
 const providerOptions = [
   { label: 'OpenAI', value: 'openai' },
@@ -94,30 +123,83 @@ const form = reactive({
   api_key: '',
   model: '',
   max_context_tokens: 200000,
+  enable_thinking: true,
+  is_xinghuo_x1: false,
 })
 
 function onProviderChange(val: string) {
-  form.base_url = defaultUrls[val] || ''
+  if (!editingId.value) {
+    form.base_url = defaultUrls[val] || ''
+  }
 }
 
-async function handleAdd() {
-  if (!form.name || !form.api_key || !form.model) {
-    message.warning('请填写名称、API Key 和模型')
+function resetForm() {
+  form.name = ''
+  form.provider = 'openai'
+  form.base_url = defaultUrls.openai
+  form.api_key = ''
+  form.model = ''
+  form.max_context_tokens = 200000
+  form.enable_thinking = true
+  form.is_xinghuo_x1 = false
+  editingId.value = null
+}
+
+function startEdit(key: ApiKeyConfig) {
+  editingId.value = key.id
+  form.name = key.name
+  form.provider = key.provider
+  form.base_url = key.base_url
+  form.api_key = ''
+  form.model = key.model
+  form.max_context_tokens = key.max_context_tokens
+  form.enable_thinking = key.enable_thinking
+  form.is_xinghuo_x1 = key.is_xinghuo_x1
+}
+
+function cancelEdit() {
+  resetForm()
+}
+
+async function handleSubmit() {
+  if (!form.name || !form.model) {
+    message.warning('请填写名称和模型')
     return
   }
+  if (!editingId.value && !form.api_key) {
+    message.warning('请填写 API Key')
+    return
+  }
+
   saving.value = true
   try {
-    const key = await store.addKey({ ...form })
-    if (key.is_valid) {
-      message.success('添加成功，验证通过')
+    if (editingId.value) {
+      const updateData: Record<string, unknown> = {
+        name: form.name,
+        provider: form.provider,
+        base_url: form.base_url,
+        model: form.model,
+        max_context_tokens: form.max_context_tokens,
+        enable_thinking: form.enable_thinking,
+        is_xinghuo_x1: form.is_xinghuo_x1,
+      }
+      if (form.api_key) {
+        updateData.api_key = form.api_key
+      }
+      await store.updateKey(editingId.value, updateData)
+      message.success('修改已保存')
+      resetForm()
     } else {
-      message.warning('已添加，但验证未通过，请检查配置')
+      const key = await store.addKey({ ...form })
+      if (key.is_valid) {
+        message.success('添加成功，验证通过')
+      } else {
+        message.warning('已添加，但验证未通过，请检查配置')
+      }
+      resetForm()
     }
-    form.name = ''
-    form.api_key = ''
-    form.model = ''
   } catch {
-    message.error('添加失败')
+    message.error(editingId.value ? '修改失败' : '添加失败')
   } finally {
     saving.value = false
   }
@@ -140,33 +222,113 @@ async function handleVerify(id: number) {
 </script>
 
 <style scoped>
-.key-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0;
+.drawer-title {
+  font-size: 16px;
+  font-weight: 700;
 }
 
-.key-item:last-child {
-  border-bottom: none;
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8e8e9a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-card {
+  background: #f9f9fb;
+  border: 1px solid #eeeef2;
+  border-radius: 12px;
+  padding: 12px 20px 10px;
+}
+
+.form-card :deep(.n-form-item) {
+  margin-bottom: 10px;
+}
+
+.form-card :deep(.n-form-item:last-of-type) {
+  margin-bottom: 0;
+}
+
+.form-card :deep(.n-form-item-label) {
+  margin-bottom: 2px;
+}
+
+.form-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.think-hint {
+  font-size: 11px;
+  color: #b0b0b8;
+}
+
+.submit-btn {
+  flex: 1;
+}
+
+.empty-keys {
+  text-align: center;
+  color: #b0b0b8;
+  padding: 20px;
+  font-size: 13px;
+}
+
+.key-card {
+  background: #f9f9fb;
+  border: 1px solid #eeeef2;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.key-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.key-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 .key-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 14px;
 }
 
-.key-meta {
+.key-detail {
   font-size: 12px;
-  color: #888;
-  margin-top: 2px;
+  color: #8e8e9a;
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .key-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 14px;
+  align-items: center;
 }
 </style>

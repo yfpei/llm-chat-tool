@@ -1,9 +1,13 @@
+import logging
+
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ApiKey
 from app.schemas import ApiKeyCreate, ApiKeyUpdate
 from app.utils.crypto import encrypt, decrypt
+
+logger = logging.getLogger(__name__)
 
 
 async def create_key(db: AsyncSession, data: ApiKeyCreate) -> ApiKey:
@@ -14,6 +18,8 @@ async def create_key(db: AsyncSession, data: ApiKeyCreate) -> ApiKey:
         api_key=encrypt(data.api_key),
         model=data.model,
         max_context_tokens=data.max_context_tokens,
+        enable_thinking=data.enable_thinking,
+        is_xinghuo_x1=data.is_xinghuo_x1,
         is_valid=False,
         is_active=False,
     )
@@ -22,7 +28,8 @@ async def create_key(db: AsyncSession, data: ApiKeyCreate) -> ApiKey:
     await db.refresh(key)
 
     # Try to verify
-    is_valid, _ = await verify_key_connectivity(data.provider, data.base_url, data.api_key, data.model)
+    is_valid, msg = await verify_key_connectivity(data.provider, data.base_url, data.api_key, data.model)
+    logger.info("Key verify [%s] %s %s -> %s: %s", data.name, data.provider, data.base_url, is_valid, msg)
     key.is_valid = is_valid
     await db.commit()
     await db.refresh(key)
@@ -80,6 +87,7 @@ async def verify_key(db: AsyncSession, key_id: int) -> tuple[bool, str]:
         return False, "Key not found"
     plaintext_key = decrypt(key.api_key)
     is_valid, message = await verify_key_connectivity(key.provider, key.base_url, plaintext_key, key.model)
+    logger.info("Key verify [id=%s] %s %s -> %s: %s", key_id, key.provider, key.base_url, is_valid, message)
     key.is_valid = is_valid
     await db.commit()
     return is_valid, message
@@ -94,9 +102,11 @@ async def verify_key_connectivity(provider: str, base_url: str, api_key: str, mo
     try:
         if provider == "openai":
             # 用 chat/completions 验证，兼容所有 OpenAI 协议代理
+            url = f"{base_url}/chat/completions"
+            logger.info("OpenAI verify -> POST %s", url)
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(
-                    f"{base_url}/chat/completions",
+                    url,
                     headers={
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json",
@@ -107,6 +117,7 @@ async def verify_key_connectivity(provider: str, base_url: str, api_key: str, mo
                         "messages": [{"role": "user", "content": "hi"}],
                     },
                 )
+                logger.info("OpenAI verify response: %s %s", resp.status_code, resp.text[:300])
                 if resp.status_code == 200:
                     return True, "连接成功"
                 body = resp.text[:200]
@@ -119,6 +130,7 @@ async def verify_key_connectivity(provider: str, base_url: str, api_key: str, mo
             else:
                 messages_url = f"{base_url}/v1/messages"
 
+            logger.info("Anthropic verify -> POST %s", messages_url)
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(
                     messages_url,
@@ -140,11 +152,14 @@ async def verify_key_connectivity(provider: str, base_url: str, api_key: str, mo
 
         return False, f"未知的 provider: {provider}"
 
-    except httpx.ConnectError:
+    except httpx.ConnectError as e:
+        logger.error("ConnectError: %s", e)
         return False, "无法连接到服务器，请检查 Base URL 是否正确"
-    except httpx.TimeoutException:
+    except httpx.TimeoutException as e:
+        logger.error("Timeout: %s", e)
         return False, "连接超时，请检查网络或 Base URL"
     except Exception as e:
+        logger.error("Unexpected error: %s", e, exc_info=True)
         return False, f"验证出错: {str(e)}"
 
 

@@ -1,4 +1,4 @@
-import type { ChatEvent } from '../types'
+import type { ChatEvent, TokenUsage } from '../types'
 
 export function sendMessage(
   conversationId: string,
@@ -6,6 +6,7 @@ export function sendMessage(
   onChunk: (text: string) => void,
   onDone: () => void,
   onError: (error: string) => void,
+  onUsage?: (usage: TokenUsage) => void,
 ): AbortController {
   const controller = new AbortController()
 
@@ -39,11 +40,13 @@ export function sendMessage(
             try {
               const event: ChatEvent = JSON.parse(line.slice(6))
               if (event.type === 'chunk') {
-                onChunk(event.content)
+                onChunk(event.content as string)
+              } else if (event.type === 'usage' && onUsage) {
+                onUsage(event.content as TokenUsage)
               } else if (event.type === 'done') {
                 onDone()
               } else if (event.type === 'error') {
-                onError(event.content)
+                onError(event.content as string)
               }
             } catch {
               // Skip malformed JSON

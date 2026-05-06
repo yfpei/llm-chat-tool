@@ -17,6 +17,13 @@ async def get_db():
 
 
 async def init_db():
+    from sqlalchemy import text
+
     async with engine.begin() as conn:
-        from app.models import ApiKey, Conversation, Message  # noqa: F401
+        from app.models import ApiKey, Conversation, Message, BatchTask  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
+        # Migration: add is_xinghuo_x1 column for existing databases
+        try:
+            await conn.execute(text("ALTER TABLE api_keys ADD COLUMN is_xinghuo_x1 BOOLEAN DEFAULT 0"))
+        except Exception:
+            pass

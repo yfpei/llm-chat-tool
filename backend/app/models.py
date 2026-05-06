@@ -17,6 +17,8 @@ class ApiKey(Base):
     api_key = Column(Text, nullable=False)  # encrypted
     model = Column(String(100), nullable=False)
     max_context_tokens = Column(Integer, default=200000)
+    enable_thinking = Column(Boolean, default=True)
+    is_xinghuo_x1 = Column(Boolean, default=False)
     is_active = Column(Boolean, default=False)
     is_valid = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -48,3 +50,21 @@ class Message(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class BatchTask(Base):
+    __tablename__ = "batch_tasks"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(200), default="未命名任务")
+    file_id = Column(String(36), nullable=False)
+    filename = Column(String(500), nullable=False)
+    columns = Column(Text, nullable=False)
+    headers = Column(Text, nullable=False)
+    total_rows = Column(Integer, default=0)
+    status = Column(String(20), default="uploaded")
+    config_json = Column(Text, nullable=True)
+    progress_completed = Column(Integer, default=0)
+    progress_total = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

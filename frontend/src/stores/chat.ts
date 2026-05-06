@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { ApiKeyConfig, Conversation, ConversationDetail, Message } from '../types'
 import * as keysApi from '../api/keys'
 import * as convApi from '../api/conversations'
@@ -9,11 +9,30 @@ export const useChatStore = defineStore('chat', () => {
   const apiKeys = ref<ApiKeyConfig[]>([])
   const conversations = ref<Conversation[]>([])
   const currentConversation = ref<ConversationDetail | null>(null)
-  const isStreaming = ref(false)
-  const streamingContent = ref('')
   const showSettings = ref(false)
 
-  let abortController: AbortController | null = null
+  // Per-conversation streaming state so each conversation streams independently.
+  const streamingStates = ref<Record<string, { abortController: AbortController | null; content: string; startTime: number }>>({})
+
+  // Conversation detail cache — preserves in-progress streaming state across switches.
+  const conversationCache = ref<Record<string, ConversationDetail>>({})
+
+  const isStreaming = computed(() => {
+    const id = currentConversation.value?.id
+    if (!id) return false
+    return streamingStates.value[id]?.abortController != null
+  })
+
+  function getStreamState(convId: string) {
+    if (!streamingStates.value[convId]) {
+      streamingStates.value[convId] = { abortController: null, content: '', startTime: 0 }
+    }
+    return streamingStates.value[convId]
+  }
+
+  function cleanupStreamState(convId: string) {
+    delete streamingStates.value[convId]
+  }
 
   async function loadKeys() {
     apiKeys.value = await keysApi.fetchKeys()
@@ -22,6 +41,13 @@ export const useChatStore = defineStore('chat', () => {
   async function addKey(data: Parameters<typeof keysApi.createKey>[0]) {
     const key = await keysApi.createKey(data)
     apiKeys.value.unshift(key)
+    return key
+  }
+
+  async function updateKey(id: number, data: Parameters<typeof keysApi.updateKey>[1]) {
+    const key = await keysApi.updateKey(id, data)
+    const idx = apiKeys.value.findIndex((k) => k.id === id)
+    if (idx !== -1) apiKeys.value[idx] = key
     return key
   }
 
@@ -50,10 +76,27 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function selectConversation(id: string) {
-    currentConversation.value = await convApi.getConversation(id)
+    // If cached and currently streaming, reuse the cache so in-progress
+    // assistant messages survive the re-select.
+    const cached = conversationCache.value[id]
+    if (cached && streamingStates.value[id]?.abortController != null) {
+      currentConversation.value = cached
+      return
+    }
+
+    const detail = await convApi.getConversation(id)
+    conversationCache.value[id] = detail
+    currentConversation.value = detail
   }
 
   async function removeConversation(id: string) {
+    const streamState = streamingStates.value[id]
+    if (streamState?.abortController) {
+      streamState.abortController.abort()
+    }
+    cleanupStreamState(id)
+    delete conversationCache.value[id]
+
     await convApi.deleteConversation(id)
     conversations.value = conversations.value.filter((c) => c.id !== id)
     if (currentConversation.value?.id === id) {
@@ -65,6 +108,9 @@ export const useChatStore = defineStore('chat', () => {
     await convApi.updateConversation(id, { title })
     const conv = conversations.value.find((c) => c.id === id)
     if (conv) conv.title = title
+    if (conversationCache.value[id]) {
+      conversationCache.value[id].title = title
+    }
     if (currentConversation.value?.id === id) {
       currentConversation.value.title = title
     }
@@ -74,6 +120,9 @@ export const useChatStore = defineStore('chat', () => {
     if (!currentConversation.value || isStreaming.value) return
 
     const convId = currentConversation.value.id
+    // Capture the conversation object so callbacks always update the correct
+    // conversation, regardless of what currentConversation.value points to later.
+    const conv = currentConversation.value
 
     const userMsg: Message = {
       id: Date.now(),
@@ -81,10 +130,11 @@ export const useChatStore = defineStore('chat', () => {
       content,
       created_at: new Date().toISOString(),
     }
-    currentConversation.value.messages.push(userMsg)
+    conv.messages.push(userMsg)
 
-    isStreaming.value = true
-    streamingContent.value = ''
+    const streamState = getStreamState(convId)
+    streamState.content = ''
+    streamState.startTime = Date.now()
 
     const assistantMsg: Message = {
       id: Date.now() + 1,
@@ -92,39 +142,48 @@ export const useChatStore = defineStore('chat', () => {
       content: '',
       created_at: new Date().toISOString(),
     }
-    currentConversation.value.messages.push(assistantMsg)
+    conv.messages.push(assistantMsg)
+    const assistantIdx = conv.messages.length - 1
 
-    abortController = chatApi.sendMessage(
+    streamState.abortController = chatApi.sendMessage(
       convId,
       content,
       (chunk) => {
-        streamingContent.value += chunk
-        assistantMsg.content = streamingContent.value
+        streamState.content += chunk
+        conv.messages[assistantIdx].content = streamState.content
       },
       () => {
-        isStreaming.value = false
-        streamingContent.value = ''
+        cleanupStreamState(convId)
         loadConversations()
       },
       (error) => {
-        isStreaming.value = false
-        assistantMsg.content = `[错误] ${error}`
+        conv.messages[assistantIdx].content = `[错误] ${error}`
+        cleanupStreamState(convId)
+      },
+      (usage) => {
+        const elapsed = (Date.now() - streamState.startTime) / 1000
+        if (elapsed > 0 && usage.completion_tokens > 0) {
+          usage.tokens_per_second = Math.round(usage.completion_tokens / elapsed)
+        }
+        conv.messages[assistantIdx].usage = usage
       },
     )
   }
 
   function stopStreaming() {
-    if (abortController) {
-      abortController.abort()
-      abortController = null
-      isStreaming.value = false
+    const id = currentConversation.value?.id
+    if (!id) return
+    const streamState = streamingStates.value[id]
+    if (streamState?.abortController) {
+      streamState.abortController.abort()
+      cleanupStreamState(id)
     }
   }
 
   return {
     apiKeys, conversations, currentConversation,
-    isStreaming, streamingContent, showSettings,
-    loadKeys, addKey, removeKey, setActiveKey, activeKey,
+    isStreaming, showSettings,
+    loadKeys, addKey, updateKey, removeKey, setActiveKey, activeKey,
     loadConversations, newConversation, selectConversation,
     removeConversation, renameConversation,
     sendMessage, stopStreaming,
