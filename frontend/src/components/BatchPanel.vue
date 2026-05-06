@@ -492,7 +492,7 @@ function onPromptFocus() {
   detectSlash()
 }
 
-function onPromptInput(e: Event) {
+function onPromptInput() {
   detectSlash()
 }
 
