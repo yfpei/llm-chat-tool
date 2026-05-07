@@ -18,7 +18,10 @@ class OpenAIProvider(LLMProvider):
             messages=messages,
             stream=True,
             stream_options={"include_usage": True},
-            extra_body={"chat_template_kwargs": {"enable_thinking": self.enable_thinking}},
+            extra_body={
+                "chat_template_kwargs": {"enable_thinking": self.enable_thinking},
+                "thinking": {"type": "enabled" if self.enable_thinking else "disabled"},
+            },
         )
         async for chunk in stream:
             if hasattr(chunk, 'usage') and chunk.usage:
