@@ -108,7 +108,7 @@
               <div v-for="(cond, ci) in group.conditions" :key="ci" class="filter-row">
                 <n-select v-model:value="cond.field" :options="filterFieldOptions" placeholder="选择列" class="filter-col-field" />
                 <n-select v-model:value="cond.operator" :options="operatorOptions" class="filter-col-op" />
-                <n-input v-model:value="cond.value" placeholder="值" class="filter-col-val" />
+                <n-input v-model:value="cond.value" placeholder="值" class="filter-col-val" :disabled="noValueOperators.includes(cond.operator)" />
                 <n-button text size="tiny" type="error" @click="group.conditions.splice(ci, 1)" class="filter-col-del">✕</n-button>
               </div>
               <div class="filter-group-footer">
@@ -341,11 +341,17 @@ const filter = reactive<FilterConfig>({
   logic: 'and',
 })
 
+const noValueOperators = ['not_empty', 'is_empty']
+
 const operatorOptions = [
-  { label: '包含', value: 'contains' },
   { label: '等于', value: 'equals' },
+  { label: '包含', value: 'contains' },
   { label: '大于', value: 'gt' },
   { label: '小于', value: 'lt' },
+  { label: '大于等于', value: 'gte' },
+  { label: '小于等于', value: 'lte' },
+  { label: '不为空', value: 'not_empty' },
+  { label: '为空', value: 'is_empty' },
 ]
 
 const operatorLabels: Record<string, string> = {
@@ -353,9 +359,16 @@ const operatorLabels: Record<string, string> = {
   equals: '=',
   gt: '>',
   lt: '<',
+  gte: '>=',
+  lte: '<=',
+  not_empty: '不为空',
+  is_empty: '为空',
 }
 
 function condLabel(c: FilterCondition) {
+  if (noValueOperators.includes(c.operator)) {
+    return `${c.field || '--'} ${operatorLabels[c.operator] || c.operator}`
+  }
   return `${c.field || '--'} ${operatorLabels[c.operator] || c.operator} "${c.value}"`
 }
 
@@ -411,7 +424,7 @@ function resetFilter() {
 }
 
 function hasAnyFilterCondition() {
-  return filter.groups.some((g) => g.conditions.some((c) => c.field && c.value))
+  return filter.groups.some((g) => g.conditions.some((c) => c.field && (c.value || noValueOperators.includes(c.operator))))
 }
 
 async function applyFilterPreview() {

@@ -18,7 +18,7 @@
                   <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
               </template>
-              {{ currentView === 'batch' ? '新任务' : '新对话' }}
+              {{ currentView === 'batch' ? '新任务' : currentView === 'es-export' ? '新导出' : '新对话' }}
             </n-button>
           </div>
 
@@ -37,6 +37,14 @@
               </svg>
               跑批
             </button>
+            <button :class="['nav-item', { active: currentView === 'es-export' }]" @click="currentView = 'es-export'">
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <ellipse cx="7.5" cy="5" rx="5.5" ry="2.5" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M2 5v5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V5" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M2 7.5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+              导出
+            </button>
           </div>
 
           <SessionList :view="currentView" />
@@ -54,6 +62,7 @@
           <KeepAlive>
             <ChatWindow v-if="currentView === 'chat'" key="chat" />
             <BatchPanel v-else-if="currentView === 'batch'" key="batch" />
+            <EsExportPanel v-else-if="currentView === 'es-export'" key="es-export" />
           </KeepAlive>
         </main>
         <SettingsPanel />
@@ -67,18 +76,23 @@ import { ref, onMounted } from 'vue'
 import { NConfigProvider, NMessageProvider, NButton } from 'naive-ui'
 import { useChatStore } from './stores/chat'
 import { useBatchStore } from './stores/batch'
+import { useEsExportStore } from './stores/esExport'
 import SessionList from './components/SessionList.vue'
 import ChatWindow from './components/ChatWindow.vue'
 import BatchPanel from './components/BatchPanel.vue'
+import EsExportPanel from './components/EsExportPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 
 const store = useChatStore()
 const batchStore = useBatchStore()
-const currentView = ref<'chat' | 'batch'>('chat')
+const esExportStore = useEsExportStore()
+const currentView = ref<'chat' | 'batch' | 'es-export'>('chat')
 
 function handleNewChat() {
   if (currentView.value === 'batch') {
     batchStore.newBatchTask()
+  } else if (currentView.value === 'es-export') {
+    esExportStore.newTask()
   } else {
     store.newConversation()
   }
@@ -105,7 +119,7 @@ const themeOverrides = {
 }
 
 onMounted(async () => {
-  await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks()])
+  await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks(), esExportStore.loadTasks()])
 })
 </script>
 

@@ -213,6 +213,20 @@ def _eval_condition(val: str, op: str, cv: str) -> bool:
             return float(val) < float(cv)
         except (ValueError, TypeError):
             return False
+    elif op == "gte":
+        try:
+            return float(val) >= float(cv)
+        except (ValueError, TypeError):
+            return False
+    elif op == "lte":
+        try:
+            return float(val) <= float(cv)
+        except (ValueError, TypeError):
+            return False
+    elif op == "not_empty":
+        return bool(val and val.strip())
+    elif op == "is_empty":
+        return not val or not val.strip()
     return False
 
 

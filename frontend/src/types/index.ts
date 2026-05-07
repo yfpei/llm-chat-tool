@@ -74,7 +74,7 @@ export interface PreviewRow {
 
 export interface FilterCondition {
   field: string
-  operator: 'contains' | 'equals' | 'gt' | 'lt'
+  operator: 'contains' | 'equals' | 'gt' | 'lt' | 'gte' | 'lte' | 'not_empty' | 'is_empty'
   value: string
 }
 
@@ -130,4 +130,29 @@ export interface BatchTask {
   progress_total: number
   created_at: string
   updated_at: string
+}
+
+// ── ES Export Types ───────────────────────────
+
+export interface EsExportTask {
+  id: string
+  title: string
+  es_host: string
+  es_username?: string | null
+  index_name?: string | null
+  query_dsl?: string | null
+  output_fields?: string | null
+  status: 'created' | 'running' | 'completed' | 'failed'
+  total_hits: number
+  exported_count: number
+  file_id?: string | null
+  config_json?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface EsPreviewResult {
+  total: number
+  rows: Record<string, unknown>[]
+  fields: string[]
 }

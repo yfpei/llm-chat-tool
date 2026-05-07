@@ -40,7 +40,7 @@
     </template>
 
     <!-- Batch mode: batch tasks -->
-    <template v-else>
+    <template v-else-if="view === 'batch'">
       <div
         v-for="task in batchStore.batchTasks"
         :key="task.id"
@@ -74,6 +74,43 @@
         </n-popconfirm>
       </div>
     </template>
+
+    <!-- ES Export mode: export tasks -->
+    <template v-else-if="view === 'es-export'">
+      <div
+        v-for="task in esExportStore.tasks"
+        :key="task.id"
+        :class="['session-item', { active: esExportStore.currentTask?.id === task.id }]"
+        @click="handleEsTaskClick(task)"
+      >
+        <div class="session-content">
+          <div class="session-icon">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <ellipse cx="7.5" cy="5" rx="5.5" ry="2.5" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M2 5v5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V5" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M2 7.5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5" stroke="currentColor" stroke-width="1.2"/>
+            </svg>
+          </div>
+          <span v-if="editingEsTaskId !== task.id" class="session-title">{{ task.title }}</span>
+          <n-input v-else
+                   size="tiny"
+                   v-model:value="editEsTaskTitle"
+                   @blur="finishEditEsTask(task.id)"
+                   @keyup.enter="finishEditEsTask(task.id)"
+                   @click.stop />
+        </div>
+        <n-popconfirm @positive-click="esExportStore.removeTask(task.id)">
+          <template #trigger>
+            <button class="delete-btn" @click.stop title="删除">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M3 4h8M5.5 4V3a1 1 0 011-1h1a1 1 0 011 1v1M11 4v7.5a1 1 0 01-1 1H4a1 1 0 01-1-1V4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </template>
+          确认删除此任务？
+        </n-popconfirm>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -82,14 +119,16 @@ import { ref, nextTick } from 'vue'
 import { NPopconfirm, NInput } from 'naive-ui'
 import { useChatStore } from '../stores/chat'
 import { useBatchStore } from '../stores/batch'
-import type { BatchTask, Conversation } from '../types'
+import { useEsExportStore } from '../stores/esExport'
+import type { BatchTask, Conversation, EsExportTask } from '../types'
 
 defineProps<{
-  view: 'chat' | 'batch'
+  view: 'chat' | 'batch' | 'es-export'
 }>()
 
 const store = useChatStore()
 const batchStore = useBatchStore()
+const esExportStore = useEsExportStore()
 
 // ── Conversation rename ──────────────────────
 const editingConvId = ref<string | null>(null)
@@ -143,6 +182,33 @@ async function finishEditTask(taskId: string) {
     await batchStore.renameBatchTask(taskId, newTitle)
   }
   editingTaskId.value = null
+}
+
+// ── ES Export task rename ────────────────────
+const editingEsTaskId = ref<string | null>(null)
+const editEsTaskTitle = ref('')
+
+function handleEsTaskClick(task: EsExportTask) {
+  if (editingEsTaskId.value) return
+  if (esExportStore.currentTask?.id === task.id) {
+    editingEsTaskId.value = task.id
+    editEsTaskTitle.value = task.title
+    nextTick(() => {
+      const inp = document.querySelector<HTMLInputElement>('.session-item.active input')
+      inp?.focus()
+      inp?.select()
+    })
+  } else {
+    esExportStore.selectTask(task.id)
+  }
+}
+
+async function finishEditEsTask(taskId: string) {
+  const newTitle = editEsTaskTitle.value.trim()
+  if (newTitle) {
+    await esExportStore.renameTask(taskId, newTitle)
+  }
+  editingEsTaskId.value = null
 }
 </script>
 

@@ -166,3 +166,56 @@ class BatchTaskResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- ES Export Schemas ---
+class EsExportTaskCreate(BaseModel):
+    title: str = "未命名导出任务"
+    es_host: str
+    es_username: Optional[str] = None
+    es_password: Optional[str] = None
+
+
+class EsExportTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    es_host: Optional[str] = None
+    es_username: Optional[str] = None
+    es_password: Optional[str] = None
+    index_name: Optional[str] = None
+    query_dsl: Optional[str] = None
+    output_fields: Optional[str] = None
+    config_json: Optional[str] = None
+
+
+class EsExportTaskResponse(BaseModel):
+    id: str
+    title: str
+    es_host: str
+    es_username: Optional[str] = None
+    index_name: Optional[str] = None
+    query_dsl: Optional[str] = None
+    output_fields: Optional[str] = None
+    status: str
+    total_hits: int
+    exported_count: int
+    file_id: Optional[str] = None
+    config_json: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class EsPreviewRequest(BaseModel):
+    query_dsl: Optional[dict] = None
+    output_fields: Optional[list[str]] = None
+    page: int = 1
+    page_size: int = 50
+    top_n: Optional[int] = None
+
+
+class EsExportRequest(BaseModel):
+    query_dsl: Optional[dict] = None
+    output_fields: Optional[list[str]] = None
+    top_n: Optional[int] = None

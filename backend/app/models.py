@@ -68,3 +68,23 @@ class BatchTask(Base):
     progress_total = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EsExportTask(Base):
+    __tablename__ = "es_export_tasks"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(200), default="未命名导出任务")
+    es_host = Column(String(500), nullable=False)
+    es_username = Column(String(100), nullable=True)
+    es_password = Column(Text, nullable=True)
+    index_name = Column(String(200), nullable=True)
+    query_dsl = Column(Text, nullable=True)
+    output_fields = Column(Text, nullable=True)
+    status = Column(String(20), default="created")
+    total_hits = Column(Integer, default=0)
+    exported_count = Column(Integer, default=0)
+    file_id = Column(String(36), nullable=True)
+    config_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

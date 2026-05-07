@@ -20,7 +20,7 @@ async def init_db():
     from sqlalchemy import text
 
     async with engine.begin() as conn:
-        from app.models import ApiKey, Conversation, Message, BatchTask  # noqa: F401
+        from app.models import ApiKey, Conversation, Message, BatchTask, EsExportTask  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
         # Migration: add is_xinghuo_x1 column for existing databases
         try:
