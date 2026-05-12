@@ -299,7 +299,7 @@ const reuploadKey = ref(0)
 const runningTaskId = ref<string | null>(null)
 const progress = reactive({ completed: 0, total: 0 })
 const startTime = ref(0)
-let abortController: AbortController | null = null
+const abortControllers = new Map<string, AbortController>()
 const runningResults = new Map<string, ResultRow[]>()
 
 // Batch result updates to avoid re-rendering on every single row
@@ -821,14 +821,13 @@ async function handleReupload(opts: { file: any; fileList: any[] }) {
     progress.completed = 0
     progress.total = 0
     batchError.value = ''
+    resetConfig()
     // Auto-select first column and active key
-    if (config.input_columns.length === 0 && result.columns.length > 0) {
+    if (result.columns.length > 0) {
       config.input_columns = [result.columns[0]]
     }
-    if (!config.api_key_id) {
-      const active = store.activeKey()
-      if (active) config.api_key_id = active.id
-    }
+    const active = store.activeKey()
+    if (active) config.api_key_id = active.id
   } catch (e: any) {
     uploadError.value = e.message || '上传失败'
   } finally {
@@ -845,15 +844,14 @@ async function handleUpload(opts: { file: any; fileList: any[] }) {
     const result = await batchApi.uploadExcel(rawFile)
     batchStore.setUploadResult(result)
     filterPreviewResult.value = null
+    resetConfig()
     await batchStore.loadBatchTasks()
     batchStore.currentTask = batchStore.batchTasks.find((t) => t.id === result.task_id) || null
-    if (config.input_columns.length === 0 && result.columns.length > 0) {
+    if (result.columns.length > 0) {
       config.input_columns = [result.columns[0]]
     }
-    if (!config.api_key_id) {
-      const active = store.activeKey()
-      if (active) config.api_key_id = active.id
-    }
+    const active = store.activeKey()
+    if (active) config.api_key_id = active.id
   } catch (e: any) {
     uploadError.value = e.message || '上传失败'
   } finally {
@@ -884,26 +882,27 @@ async function startBatch() {
   startTime.value = Date.now()
   running.value = true
   runningTaskId.value = batchStore.currentTask!.id
+  const myTaskId = batchStore.currentTask!.id
 
-  await batchStore.saveBatchTaskConfig(batchStore.currentTask.id, {
+  await batchStore.saveBatchTaskConfig(myTaskId, {
     ...config,
     filter: { ...filter },
   })
 
   // Track results per running task for restoration when switching back
   const taskResults: ResultRow[] = []
-  runningResults.set(batchStore.currentTask.id, taskResults)
+  runningResults.set(myTaskId, taskResults)
 
-  abortController = batchApi.runBatch(
+  const ctrl = batchApi.runBatch(
     {
       ...config,
       api_key_id: config.api_key_id,
       file_id: uploadResult.value!.file_id,
-      task_id: batchStore.currentTask.id,
+      task_id: myTaskId,
       filter: hasAnyFilterCondition() || filter.top_n ? { ...filter } : undefined,
     },
     (completed, total) => {
-      if (batchStore.currentTask?.id === runningTaskId.value) {
+      if (batchStore.currentTask?.id === myTaskId) {
         progress.completed = completed
         progress.total = total
       }
@@ -911,23 +910,25 @@ async function startBatch() {
     (row, input, output, parsed) => {
       const entry = { row, input, output, status: 'success' as const, parsed }
       taskResults.push(entry)
-      if (batchStore.currentTask?.id === runningTaskId.value) {
+      if (batchStore.currentTask?.id === myTaskId) {
         addResult(entry)
       }
     },
     (row, input, error) => {
       const entry = { row, input, output: '', status: 'error' as const, error }
       taskResults.push(entry)
-      if (batchStore.currentTask?.id === runningTaskId.value) {
+      if (batchStore.currentTask?.id === myTaskId) {
         addResult(entry)
       }
     },
     () => {
-      const wasMyTask = batchStore.currentTask?.id === runningTaskId.value
-      // Flush any remaining buffered results
+      const wasMyTask = batchStore.currentTask?.id === myTaskId
       flushResults()
-      runningResults.delete(runningTaskId.value!)
-      runningTaskId.value = null
+      abortControllers.delete(myTaskId)
+      runningResults.delete(myTaskId)
+      if (runningTaskId.value === myTaskId) {
+        runningTaskId.value = null
+      }
       if (wasMyTask) {
         done.value = true
         running.value = false
@@ -935,21 +936,35 @@ async function startBatch() {
     },
     (msg) => {
       flushResults()
-      runningResults.delete(runningTaskId.value!)
-      batchError.value = msg
-      running.value = false
+      abortControllers.delete(myTaskId)
+      runningResults.delete(myTaskId)
+      if (runningTaskId.value === myTaskId) {
+        runningTaskId.value = null
+      }
+      if (batchStore.currentTask?.id === myTaskId) {
+        batchError.value = msg
+        running.value = false
+      }
     },
   )
+  abortControllers.set(myTaskId, ctrl)
 }
 
 function stopBatch() {
-  if (abortController) {
-    abortController.abort()
-    abortController = null
-    flushResults()
-    runningResults.delete(runningTaskId.value!)
-    running.value = false
+  const taskId = batchStore.currentTask?.id
+  if (taskId) {
+    const ctrl = abortControllers.get(taskId)
+    if (ctrl) {
+      ctrl.abort()
+      abortControllers.delete(taskId)
+    }
   }
+  flushResults()
+  if (runningTaskId.value) {
+    runningResults.delete(runningTaskId.value)
+    runningTaskId.value = null
+  }
+  running.value = false
 }
 
 function download() {

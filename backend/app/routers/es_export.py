@@ -116,6 +116,12 @@ async def update_task(task_id: str, data: EsExportTaskUpdate, db: AsyncSession =
 async def delete_task(task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
     _verify_ownership(task, current_user)
+    # Clean up exported files
+    if task.file_id:
+        for suffix in (".xlsx",):
+            p = os.path.join(es_service.UPLOAD_DIR, f"{task.file_id}{suffix}")
+            if os.path.exists(p):
+                os.remove(p)
     await db.delete(task)
     await db.commit()
     return {"ok": True}
