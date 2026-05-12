@@ -1,4 +1,5 @@
 import type { ChatEvent, TokenUsage } from '../types'
+import { authFetch } from './client'
 
 export function sendMessage(
   conversationId: string,
@@ -10,7 +11,7 @@ export function sendMessage(
 ): AbortController {
   const controller = new AbortController()
 
-  fetch(`/api/chat/${conversationId}`, {
+  authFetch(`/api/chat/${conversationId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),

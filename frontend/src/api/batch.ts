@@ -1,10 +1,11 @@
 import type { UploadResponse, BatchRunConfig, BatchEvent } from '../types'
+import { authFetch } from './client'
 
 export async function uploadExcel(file: File, taskId?: string): Promise<UploadResponse> {
   const form = new FormData()
   form.append('file', file)
   if (taskId) form.append('task_id', taskId)
-  const res = await fetch('/api/batch/upload', { method: 'POST', body: form })
+  const res = await authFetch('/api/batch/upload', { method: 'POST', body: form })
   if (!res.ok) {
     const err = await res.json()
     throw new Error(err.detail || '上传失败')
@@ -22,7 +23,7 @@ export function runBatch(
 ): AbortController {
   const controller = new AbortController()
 
-  fetch('/api/batch/run', {
+  authFetch('/api/batch/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -85,7 +86,7 @@ export function runBatch(
 }
 
 export async function filterPreview(taskId: string, filter: object): Promise<{ total_before: number; total_after: number; preview: any[]; columns: string[] }> {
-  const res = await fetch(`/api/batch/${taskId}/filter-preview`, {
+  const res = await authFetch(`/api/batch/${taskId}/filter-preview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(filter),
@@ -98,7 +99,7 @@ export async function filterPreview(taskId: string, filter: object): Promise<{ t
 }
 
 export async function filterDownload(taskId: string, filter: object, filename: string): Promise<void> {
-  const res = await fetch(`/api/batch/${taskId}/filter-download`, {
+  const res = await authFetch(`/api/batch/${taskId}/filter-download`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(filter),

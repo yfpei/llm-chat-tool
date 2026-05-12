@@ -1,9 +1,10 @@
 import type { EsExportTask, EsPreviewResult } from '../types'
+import { authFetch } from './client'
 
 const API_BASE = '/api/es-export'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authFetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
