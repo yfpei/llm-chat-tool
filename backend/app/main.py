@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database import init_db
-from app.routers import keys, conversations, chat, batch, batch_tasks, es_export
+from app.routers import keys, conversations, chat, batch, batch_tasks, es_export, auth, users
 
 logging.basicConfig(level=logging.INFO)
 
@@ -44,6 +44,8 @@ app.include_router(chat.router)
 app.include_router(batch.router)
 app.include_router(batch_tasks.router)
 app.include_router(es_export.router)
+app.include_router(auth.router)
+app.include_router(users.router)
 
 if STATIC_DIR and os.path.isdir(STATIC_DIR):
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

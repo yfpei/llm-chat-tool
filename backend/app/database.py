@@ -20,10 +20,37 @@ async def init_db():
     from sqlalchemy import text
 
     async with engine.begin() as conn:
-        from app.models import ApiKey, Conversation, Message, BatchTask, EsExportTask  # noqa: F401
+        from app.models import User, ApiKey, UserKeyOverride, Conversation, Message, BatchTask, EsExportTask  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
-        # Migration: add is_xinghuo_x1 column for existing databases
+
+        # --- Migrations for existing databases ---
+
+        # Add is_xinghuo_x1 column
         try:
             await conn.execute(text("ALTER TABLE api_keys ADD COLUMN is_xinghuo_x1 BOOLEAN DEFAULT 0"))
+        except Exception:
+            pass
+
+        # Add user_id to api_keys
+        try:
+            await conn.execute(text("ALTER TABLE api_keys ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+        except Exception:
+            pass
+
+        # Add user_id to conversations
+        try:
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+        except Exception:
+            pass
+
+        # Add user_id to batch_tasks
+        try:
+            await conn.execute(text("ALTER TABLE batch_tasks ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+        except Exception:
+            pass
+
+        # Add user_id to es_export_tasks
+        try:
+            await conn.execute(text("ALTER TABLE es_export_tasks ADD COLUMN user_id INTEGER REFERENCES users(id)"))
         except Exception:
             pass
