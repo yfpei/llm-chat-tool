@@ -29,21 +29,21 @@ class ApiKey(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False)
-    provider = Column(String(20), nullable=False)
+    provider = Column(String(20), nullable=False)  # "openai" or "anthropic"
     base_url = Column(String(500), nullable=False)
-    api_key = Column(Text, nullable=False)
+    api_key = Column(Text, nullable=False)  # encrypted
     model = Column(String(100), nullable=False)
     max_context_tokens = Column(Integer, default=200000)
     enable_thinking = Column(Boolean, default=True)
     is_xinghuo_x1 = Column(Boolean, default=False)
     is_active = Column(Boolean, default=False)
     is_valid = Column(Boolean, default=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="api_keys")
     conversations = relationship("Conversation", back_populates="api_key_rel")
-    overrides = relationship("UserKeyOverride", back_populates="api_key", cascade="all, delete-orphan")
+    overrides = relationship("UserKeyOverride", back_populates="api_key", cascade="save-update, merge")
 
 
 class UserKeyOverride(Base):
@@ -66,7 +66,7 @@ class Conversation(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String(200), default="新会话")
     api_key_id = Column(Integer, ForeignKey("api_keys.id"), nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -81,7 +81,7 @@ class Message(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     conversation_id = Column(String(36), ForeignKey("conversations.id"), nullable=False)
-    role = Column(String(20), nullable=False)
+    role = Column(String(20), nullable=False)  # "user", "assistant", "system"
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -102,7 +102,7 @@ class BatchTask(Base):
     config_json = Column(Text, nullable=True)
     progress_completed = Column(Integer, default=0)
     progress_total = Column(Integer, default=0)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -125,7 +125,7 @@ class EsExportTask(Base):
     exported_count = Column(Integer, default=0)
     file_id = Column(String(36), nullable=True)
     config_json = Column(Text, nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
