@@ -246,6 +246,7 @@
           :max-height="400"
           :scroll-x="600"
           :row-props="rowProps"
+          virtual-scroll
         />
         </div>
         <div v-if="done" class="download-area">
@@ -292,9 +293,46 @@ const batchError = ref('')
 const results = ref<ResultRow[]>([])
 const reuploadKey = ref(0)
 const runningTaskId = ref<string | null>(null)
-const runningResultsSnapshot = ref<ResultRow[]>([])
 const progress = reactive({ completed: 0, total: 0 })
 let abortController: AbortController | null = null
+const runningResults = new Map<string, ResultRow[]>()
+
+// Batch result updates to avoid re-rendering on every single row
+let batchTimer: ReturnType<typeof setTimeout> | null = null
+let pendingResults: ResultRow[] = []
+const parsedKeysSet = ref<Set<string>>(new Set())
+
+function flushResults() {
+  if (pendingResults.length === 0) return
+  results.value.push(...pendingResults)
+  pendingResults = []
+}
+
+function addResult(entry: ResultRow) {
+  if (entry.parsed) {
+    for (const k of Object.keys(entry.parsed)) {
+      parsedKeysSet.value.add(k)
+    }
+  }
+  pendingResults.push(entry)
+
+  if (!batchTimer) {
+    batchTimer = setTimeout(() => {
+      batchTimer = null
+      flushResults()
+    }, 80)
+  }
+}
+
+function clearResults() {
+  if (batchTimer) {
+    clearTimeout(batchTimer)
+    batchTimer = null
+  }
+  pendingResults = []
+  results.value = []
+  parsedKeysSet.value = new Set()
+}
 
 const uploadResult = computed(() => batchStore.uploadResult)
 const filterPreviewLoading = ref(false)
@@ -582,21 +620,7 @@ function onPromptScroll(e: Event) {
 }
 
 const resultColumns = computed(() => {
-  // Collect all unique parsed field names across all results
-  const parsedKeys: string[] = []
-  if (config.parse_json) {
-    const seen = new Set<string>()
-    for (const r of results.value) {
-      if (r.parsed) {
-        for (const k of Object.keys(r.parsed)) {
-          if (!seen.has(k)) {
-            seen.add(k)
-            parsedKeys.push(k)
-          }
-        }
-      }
-    }
-  }
+  const parsedKeys: string[] = config.parse_json ? [...parsedKeysSet.value] : []
 
   return [
     { title: '#', key: 'row', width: 50 },
@@ -657,7 +681,7 @@ watch(() => batchStore.currentTask, (task) => {
   if (!task) {
     done.value = false
     running.value = false
-    results.value = []
+    clearResults()
     progress.completed = 0
     progress.total = 0
     batchError.value = ''
@@ -720,14 +744,28 @@ watch(() => batchStore.currentTask, (task) => {
       // Returning to the currently running task — restore state
       running.value = true
       done.value = false
-      results.value = [...runningResultsSnapshot.value]
+      const saved = runningResults.get(task.id)
+      if (saved) {
+        clearResults()
+        results.value = [...saved]
+        // Rebuild parsedKeysSet from restored results
+        const keys = new Set<string>()
+        for (const r of saved) {
+          if (r.parsed) {
+            for (const k of Object.keys(r.parsed)) {
+              keys.add(k)
+            }
+          }
+        }
+        parsedKeysSet.value = keys
+      }
       progress.completed = task.progress_completed
       progress.total = task.progress_total
     } else {
       // A different task that happens to be running (e.g. from another client)
       running.value = false
       done.value = false
-      results.value = []
+      clearResults()
       progress.completed = task.progress_completed
       progress.total = task.progress_total
     }
@@ -749,7 +787,7 @@ watch(() => batchStore.currentTask, (task) => {
   } else {
     running.value = false
     done.value = false
-    results.value = []
+    clearResults()
     progress.completed = 0
     progress.total = 0
   }
@@ -765,7 +803,7 @@ async function handleReupload(opts: { file: any; fileList: any[] }) {
     filterPreviewResult.value = null
     // Reset progress and results for the new file
     done.value = false
-    results.value = []
+    clearResults()
     progress.completed = 0
     progress.total = 0
     batchError.value = ''
@@ -824,11 +862,11 @@ async function startBatch() {
     }
   }
 
-  done.value = false
-  batchError.value = ''
-  results.value = []
+  clearResults()
   progress.completed = 0
   progress.total = 0
+  done.value = false
+  batchError.value = ''
   running.value = true
   runningTaskId.value = batchStore.currentTask!.id
 
@@ -837,7 +875,10 @@ async function startBatch() {
     filter: { ...filter },
   })
 
-  runningResultsSnapshot.value = []
+  // Track results per running task for restoration when switching back
+  const taskResults: ResultRow[] = []
+  runningResults.set(batchStore.currentTask.id, taskResults)
+
   abortController = batchApi.runBatch(
     {
       ...config,
@@ -854,28 +895,32 @@ async function startBatch() {
     },
     (row, input, output, parsed) => {
       const entry = { row, input, output, status: 'success' as const, parsed }
-      runningResultsSnapshot.value.unshift(entry)
+      taskResults.push(entry)
       if (batchStore.currentTask?.id === runningTaskId.value) {
-        results.value.unshift(entry)
+        addResult(entry)
       }
     },
     (row, input, error) => {
       const entry = { row, input, output: '', status: 'error' as const, error }
-      runningResultsSnapshot.value.unshift(entry)
+      taskResults.push(entry)
       if (batchStore.currentTask?.id === runningTaskId.value) {
-        results.value.unshift(entry)
+        addResult(entry)
       }
     },
     () => {
       const wasMyTask = batchStore.currentTask?.id === runningTaskId.value
+      // Flush any remaining buffered results
+      flushResults()
+      runningResults.delete(runningTaskId.value!)
       runningTaskId.value = null
-      runningResultsSnapshot.value = []
       if (wasMyTask) {
         done.value = true
         running.value = false
       }
     },
     (msg) => {
+      flushResults()
+      runningResults.delete(runningTaskId.value!)
       batchError.value = msg
       running.value = false
     },
@@ -886,6 +931,8 @@ function stopBatch() {
   if (abortController) {
     abortController.abort()
     abortController = null
+    flushResults()
+    runningResults.delete(runningTaskId.value!)
     running.value = false
   }
 }
