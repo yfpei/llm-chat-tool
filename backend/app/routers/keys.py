@@ -94,7 +94,7 @@ async def activate_key(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    key = await key_service.activate_key(db, key_id, current_user.id)
+    key = await key_service.activate_key(db, key_id, current_user)
     if not key:
         raise HTTPException(status_code=404, detail="Key not found")
     return key

@@ -4,12 +4,14 @@ import type { ApiKeyConfig, Conversation, ConversationDetail, Message } from '..
 import * as keysApi from '../api/keys'
 import * as convApi from '../api/conversations'
 import * as chatApi from '../api/chat'
+import { useAuthStore } from './auth'
 
 export const useChatStore = defineStore('chat', () => {
   const apiKeys = ref<ApiKeyConfig[]>([])
   const conversations = ref<Conversation[]>([])
   const currentConversation = ref<ConversationDetail | null>(null)
   const showSettings = ref(false)
+  const activeKeyId = ref<number | null>(null)
 
   // Per-conversation streaming state so each conversation streams independently.
   const streamingStates = ref<Record<string, { abortController: AbortController | null; content: string; startTime: number }>>({})
@@ -36,6 +38,10 @@ export const useChatStore = defineStore('chat', () => {
 
   async function loadKeys() {
     apiKeys.value = await keysApi.fetchKeys()
+    const authStore = useAuthStore()
+    if (authStore.user?.active_key_id != null) {
+      activeKeyId.value = authStore.user.active_key_id
+    }
   }
 
   async function addKey(data: Parameters<typeof keysApi.createKey>[0]) {
@@ -58,11 +64,11 @@ export const useChatStore = defineStore('chat', () => {
 
   async function setActiveKey(id: number) {
     await keysApi.activateKey(id)
-    apiKeys.value.forEach((k) => (k.is_active = k.id === id))
+    activeKeyId.value = id
   }
 
   function activeKey(): ApiKeyConfig | undefined {
-    return apiKeys.value.find((k) => k.is_active)
+    return apiKeys.value.find((k) => k.id === activeKeyId.value)
   }
 
   async function loadConversations() {
@@ -182,7 +188,7 @@ export const useChatStore = defineStore('chat', () => {
 
   return {
     apiKeys, conversations, currentConversation,
-    isStreaming, showSettings,
+    isStreaming, showSettings, activeKeyId,
     loadKeys, addKey, updateKey, removeKey, setActiveKey, activeKey,
     loadConversations, newConversation, selectConversation,
     removeConversation, renameConversation,

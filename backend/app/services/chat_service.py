@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Conversation, ApiKey
+from app.models import Conversation, ApiKey, User
 from app.utils.token_counter import count_tokens
 
 
@@ -23,7 +23,7 @@ def truncate_messages(messages: list[dict], max_tokens: int, provider: str) -> l
     return system_msgs + chat_msgs
 
 
-async def get_conversation_with_key(db: AsyncSession, conversation_id: str):
+async def get_conversation_with_key(db: AsyncSession, conversation_id: str, user: User | None = None):
     """Load conversation with messages and associated API key."""
     result = await db.execute(
         select(Conversation)
@@ -37,9 +37,7 @@ async def get_conversation_with_key(db: AsyncSession, conversation_id: str):
     api_key = None
     if conv.api_key_id:
         api_key = await db.get(ApiKey, conv.api_key_id)
-    else:
-        # Use the active key
-        result = await db.execute(select(ApiKey).where(ApiKey.is_active == True))
-        api_key = result.scalar_one_or_none()
+    elif user and user.active_key_id:
+        api_key = await db.get(ApiKey, user.active_key_id)
 
     return conv, api_key

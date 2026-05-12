@@ -31,6 +31,12 @@ async def init_db():
         except Exception:
             pass
 
+        # Add active_key_id to users
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN active_key_id INTEGER REFERENCES api_keys(id)"))
+        except Exception:
+            pass
+
         # Add user_id to api_keys
         try:
             await conn.execute(text("ALTER TABLE api_keys ADD COLUMN user_id INTEGER REFERENCES users(id)"))

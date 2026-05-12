@@ -32,7 +32,7 @@ async def chat(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    conv, api_key = await get_conversation_with_key(db, conversation_id)
+    conv, api_key = await get_conversation_with_key(db, conversation_id, current_user)
     if not conv:
         raise HTTPException(status_code=404, detail="会话不存在")
     if conv.user_id != current_user.id:

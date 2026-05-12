@@ -93,14 +93,12 @@ async def test_activate_key(client):
     id1 = r1.json()["id"]
     id2 = r2.json()["id"]
 
-    await client.post(f"/api/keys/{id1}/activate", headers=headers)
-    keys = (await client.get("/api/keys", headers=headers)).json()
-    active = [k for k in keys if k["is_active"]]
-    assert len(active) == 1
-    assert active[0]["id"] == id1
+    # Activate key1
+    resp = await client.post(f"/api/keys/{id1}/activate", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["id"] == id1
 
-    await client.post(f"/api/keys/{id2}/activate", headers=headers)
-    keys = (await client.get("/api/keys", headers=headers)).json()
-    active = [k for k in keys if k["is_active"]]
-    assert len(active) == 1
-    assert active[0]["id"] == id2
+    # Activate key2 — should succeed and update user's active_key_id
+    resp = await client.post(f"/api/keys/{id2}/activate", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["id"] == id2

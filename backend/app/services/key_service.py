@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ApiKey, UserKeyOverride
+from app.models import ApiKey, User, UserKeyOverride
 from app.schemas import ApiKeyCreate, ApiKeyUpdate
 from app.utils.crypto import encrypt, decrypt
 
@@ -79,19 +79,14 @@ async def delete_key(db: AsyncSession, key_id: int) -> bool:
     return True
 
 
-async def activate_key(db: AsyncSession, key_id: int, user_id: int) -> ApiKey | None:
+async def activate_key(db: AsyncSession, key_id: int, user: User) -> ApiKey | None:
     key = await db.get(ApiKey, key_id)
     if not key:
         return None
-    if key.user_id is not None and key.user_id != user_id:
+    if key.user_id is not None and key.user_id != user.id:
         return None
-    # Deactivate all keys visible to this user
-    await db.execute(
-        update(ApiKey).values(is_active=False).where(
-            or_(ApiKey.user_id == user_id, ApiKey.user_id == None)
-        )
-    )
-    key.is_active = True
+    # Set this key as active for this user only (per-user, no interference)
+    user.active_key_id = key.id
     await db.commit()
     await db.refresh(key)
     return key

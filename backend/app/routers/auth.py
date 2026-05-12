@@ -26,7 +26,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     token = create_access_token(user.id, user.role)
     return AuthResponse(
         access_token=token,
-        user={"id": user.id, "username": user.username, "role": user.role},
+        user={"id": user.id, "username": user.username, "role": user.role, "active_key_id": user.active_key_id},
     )
 
 
@@ -56,7 +56,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     token = create_access_token(user.id, user.role)
     return AuthResponse(
         access_token=token,
-        user={"id": user.id, "username": user.username, "role": user.role},
+        user={"id": user.id, "username": user.username, "role": user.role, "active_key_id": user.active_key_id},
     )
 
 

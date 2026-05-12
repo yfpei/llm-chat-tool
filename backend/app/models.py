@@ -14,6 +14,7 @@ class User(Base):
     password_hash = Column(Text, nullable=False)
     role = Column(String(10), nullable=False, default="user")  # "admin" or "user"
     is_active = Column(Boolean, default=True)
+    active_key_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

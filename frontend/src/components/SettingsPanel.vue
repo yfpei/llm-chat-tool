@@ -66,7 +66,7 @@
                 <n-tag :type="key.is_valid ? 'success' : 'error'" size="small" :bordered="false">
                   {{ key.is_valid ? '已连接' : '未验证' }}
                 </n-tag>
-                <n-tag v-if="key.is_active" type="info" size="small" :bordered="false">使用中</n-tag>
+                <n-tag v-if="key.id === store.activeKeyId" type="info" size="small" :bordered="false">使用中</n-tag>
                 <n-tag type="warning" size="small" :bordered="false">共享</n-tag>
               </div>
               <div class="key-detail">{{ key.provider }} · {{ key.model }}</div>
@@ -85,7 +85,7 @@
             </div>
             <div class="key-actions" v-if="auth.isAdmin">
               <n-button text size="tiny" @click="startEdit(key)">编辑</n-button>
-              <n-button text size="tiny" @click="store.setActiveKey(key.id)" :disabled="key.is_active">激活</n-button>
+              <n-button text size="tiny" @click="store.setActiveKey(key.id)" :disabled="key.id === store.activeKeyId">激活</n-button>
               <n-button text size="tiny" @click="handleVerify(key.id)" :loading="verifyingId === key.id">验证</n-button>
               <n-popconfirm @positive-click="store.removeKey(key.id)">
                 <template #trigger>
@@ -95,7 +95,7 @@
               </n-popconfirm>
             </div>
             <div class="key-actions" v-else>
-              <n-button text size="tiny" @click="store.setActiveKey(key.id)" :disabled="key.is_active">激活</n-button>
+              <n-button text size="tiny" @click="store.setActiveKey(key.id)" :disabled="key.id === store.activeKeyId">激活</n-button>
               <n-button text size="tiny" @click="handleVerify(key.id)" :loading="verifyingId === key.id">验证</n-button>
             </div>
           </div>
@@ -111,14 +111,14 @@
                 <n-tag :type="key.is_valid ? 'success' : 'error'" size="small" :bordered="false">
                   {{ key.is_valid ? '已连接' : '未验证' }}
                 </n-tag>
-                <n-tag v-if="key.is_active" type="info" size="small" :bordered="false">使用中</n-tag>
+                <n-tag v-if="key.id === store.activeKeyId" type="info" size="small" :bordered="false">使用中</n-tag>
               </div>
               <div class="key-detail">{{ key.provider }} · {{ key.model }}</div>
               <div class="key-detail" v-if="key.base_url">{{ key.base_url }}</div>
             </div>
             <div class="key-actions">
               <n-button text size="tiny" @click="startEdit(key)">编辑</n-button>
-              <n-button text size="tiny" @click="store.setActiveKey(key.id)" :disabled="key.is_active">激活</n-button>
+              <n-button text size="tiny" @click="store.setActiveKey(key.id)" :disabled="key.id === store.activeKeyId">激活</n-button>
               <n-button text size="tiny" @click="handleVerify(key.id)" :loading="verifyingId === key.id">验证</n-button>
               <n-popconfirm @positive-click="store.removeKey(key.id)">
                 <template #trigger>

@@ -2,6 +2,7 @@ export interface AuthUser {
   id: number
   username: string
   role: 'admin' | 'user'
+  active_key_id?: number | null
 }
 
 export interface AuthResponse {
