@@ -75,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NConfigProvider, NMessageProvider, NButton, NDropdown, NTag } from 'naive-ui'
 import { useChatStore } from './stores/chat'
@@ -159,6 +159,13 @@ const themeOverrides = {
 
 onMounted(async () => {
   if (auth.isLoggedIn) {
+    await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks(), esExportStore.loadTasks()])
+  }
+})
+
+// Load data when user logs in (App.vue stays mounted across route changes)
+watch(() => auth.isLoggedIn, async (loggedIn) => {
+  if (loggedIn) {
     await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks(), esExportStore.loadTasks()])
   }
 })
