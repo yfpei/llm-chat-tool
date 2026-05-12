@@ -1,3 +1,22 @@
+export interface AuthUser {
+  id: number
+  username: string
+  role: 'admin' | 'user'
+}
+
+export interface AuthResponse {
+  access_token: string
+  user: AuthUser
+}
+
+export interface UserInfo {
+  id: number
+  username: string
+  role: string
+  is_active: boolean
+  created_at: string
+}
+
 export interface ApiKeyConfig {
   id: number
   name: string
