@@ -114,12 +114,14 @@ function handleLogout() {
 }
 
 const userMenuOptions = [
+  { label: 'API Key 设置', key: 'settings' },
   { label: '修改密码', key: 'password' },
   { label: '退出登录', key: 'logout' },
 ]
 
 const adminMenuOptions = [
   { label: '用户管理', key: 'users' },
+  { label: 'API Key 设置', key: 'settings' },
   { label: '修改密码', key: 'password' },
   { label: '退出登录', key: 'logout' },
 ]
@@ -131,6 +133,8 @@ function handleUserSelect(key: string) {
     router.push('/settings/password')
   } else if (key === 'users') {
     router.push('/admin/users')
+  } else if (key === 'settings') {
+    store.showSettings = true
   }
 }
 
