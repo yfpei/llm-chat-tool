@@ -4,6 +4,51 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+# --- Auth Schemas ---
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    user: dict  # { id, username, role }
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    role: str
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: str = "user"
+
+
+class UserUpdate(BaseModel):
+    username: str | None = None
+    password: str | None = None
+    role: str | None = None
+    is_active: bool | None = None
+
+
 # --- API Key Schemas ---
 class ApiKeyCreate(BaseModel):
     name: str
@@ -38,6 +83,7 @@ class ApiKeyResponse(BaseModel):
     is_xinghuo_x1: bool
     is_active: bool
     is_valid: bool
+    user_id: Optional[int] = None
     created_at: datetime
 
     class Config:
@@ -47,6 +93,18 @@ class ApiKeyResponse(BaseModel):
 class ApiKeyVerifyResponse(BaseModel):
     is_valid: bool
     message: str
+
+
+# --- Key Override Schemas ---
+class KeyOverrideRequest(BaseModel):
+    enable_thinking: bool | None = None
+    max_context_tokens: int | None = None
+
+
+class KeyWithOverridesResponse(ApiKeyResponse):
+    owner_username: str | None = None
+    user_enable_thinking: bool | None = None
+    user_max_context_tokens: int | None = None
 
 
 # --- Conversation Schemas ---
