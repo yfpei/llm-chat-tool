@@ -28,6 +28,7 @@ export interface ApiKeyConfig {
   is_xinghuo_x1: boolean
   is_active: boolean
   is_valid: boolean
+  user_id?: number | null
   created_at: string
 }
 

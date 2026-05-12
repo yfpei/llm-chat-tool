@@ -13,6 +13,8 @@
               <span class="edit-name">「{{ editingName }}」</span>
             </span>
             <span v-else>添加 Key</span>
+            <span v-if="!editingId && auth.isAdmin" class="admin-note">管理员创建的 Key 默认为全员共享</span>
+            <span v-if="!editingId && !auth.isAdmin" class="admin-note">创建私有 Key</span>
           </div>
           <div class="form-card" :class="{ 'form-card-editing': editingId }" ref="formCardRef">
             <n-form :model="form" label-placement="top" size="medium">
@@ -60,12 +62,55 @@
           </div>
         </div>
 
-        <div class="section">
-          <div class="section-label">已配置的 Key ({{ store.apiKeys.length }})</div>
-          <div v-if="store.apiKeys.length === 0" class="empty-keys">
-            暂无配置，请添加一个 API Key
+        <!-- Shared Keys -->
+        <div class="section" v-if="sharedKeys.length > 0">
+          <div class="section-label">共享 Key ({{ sharedKeys.length }})</div>
+          <div v-for="key in sharedKeys" :key="'s'+key.id" class="key-card" :class="{ 'key-card-editing': key.id === editingId }">
+            <div class="key-main">
+              <div class="key-top">
+                <span class="key-name">{{ key.name }}</span>
+                <n-tag :type="key.is_valid ? 'success' : 'error'" size="small" :bordered="false">
+                  {{ key.is_valid ? '已连接' : '未验证' }}
+                </n-tag>
+                <n-tag v-if="key.is_active" type="info" size="small" :bordered="false">使用中</n-tag>
+                <n-tag type="warning" size="small" :bordered="false">共享</n-tag>
+              </div>
+              <div class="key-detail">{{ key.provider }} · {{ key.model }}</div>
+              <div class="key-detail" v-if="key.base_url">{{ key.base_url }}</div>
+              <!-- Override controls for non-admin on shared keys -->
+              <div v-if="!auth.isAdmin" class="override-row">
+                <div class="override-item">
+                  <span class="override-label">思考</span>
+                  <n-switch :value="key.enable_thinking" size="small" @update:value="(val: boolean) => handleOverride(key.id, { enable_thinking: val })" />
+                </div>
+                <div class="override-item">
+                  <span class="override-label">Token</span>
+                  <n-input-number :value="key.max_context_tokens" size="tiny" :min="1000" :step="10000" style="width:100px" @update:value="(val: number | null) => { if (val) handleOverride(key.id, { max_context_tokens: val }) }" />
+                </div>
+              </div>
+            </div>
+            <div class="key-actions" v-if="auth.isAdmin">
+              <n-button text size="tiny" @click="startEdit(key)">编辑</n-button>
+              <n-button text size="tiny" @click="store.setActiveKey(key.id)" :disabled="key.is_active">激活</n-button>
+              <n-button text size="tiny" @click="handleVerify(key.id)" :loading="verifyingId === key.id">验证</n-button>
+              <n-popconfirm @positive-click="store.removeKey(key.id)">
+                <template #trigger>
+                  <n-button text size="tiny" type="error">删除</n-button>
+                </template>
+                确认删除此 Key？
+              </n-popconfirm>
+            </div>
+            <div class="key-actions" v-else>
+              <n-button text size="tiny" @click="store.setActiveKey(key.id)" :disabled="key.is_active">激活</n-button>
+              <n-button text size="tiny" @click="handleVerify(key.id)" :loading="verifyingId === key.id">验证</n-button>
+            </div>
           </div>
-          <div v-for="key in store.apiKeys" :key="key.id" class="key-card" :class="{ 'key-card-editing': key.id === editingId }">
+        </div>
+
+        <!-- My Keys -->
+        <div class="section" v-if="myKeys.length > 0">
+          <div class="section-label">我的 Key ({{ myKeys.length }})</div>
+          <div v-for="key in myKeys" :key="'m'+key.id" class="key-card" :class="{ 'key-card-editing': key.id === editingId }">
             <div class="key-main">
               <div class="key-top">
                 <span class="key-name">{{ key.name }}</span>
@@ -90,29 +135,38 @@
             </div>
           </div>
         </div>
+
+        <div v-if="store.apiKeys.length === 0" class="empty-keys">
+          暂无配置，请添加一个 API Key
+        </div>
       </div>
     </n-drawer-content>
   </n-drawer>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import {
   NDrawer, NDrawerContent, NForm, NFormItem,
   NInput, NInputNumber, NSelect, NButton, NTag, NPopconfirm, NSwitch,
   useMessage,
 } from 'naive-ui'
 import { useChatStore } from '../stores/chat'
-import { verifyKey } from '../api/keys'
+import { useAuthStore } from '../stores/auth'
+import { verifyKey, setKeyOverride } from '../api/keys'
 import type { ApiKeyConfig } from '../types'
 
 const store = useChatStore()
+const auth = useAuthStore()
 const message = useMessage()
 const saving = ref(false)
 const verifyingId = ref<number | null>(null)
 const editingId = ref<number | null>(null)
 const editingName = ref('')
 const formCardRef = ref<HTMLElement | null>(null)
+
+const sharedKeys = computed(() => store.apiKeys.filter(k => k.user_id === null || k.user_id === undefined))
+const myKeys = computed(() => store.apiKeys.filter(k => k.user_id !== null && k.user_id !== undefined))
 
 const providerOptions = [
   { label: 'OpenAI', value: 'openai' },
@@ -165,7 +219,6 @@ function startEdit(key: ApiKeyConfig) {
   form.max_context_tokens = key.max_context_tokens
   form.enable_thinking = key.enable_thinking
   form.is_xinghuo_x1 = key.is_xinghuo_x1
-  // 滚动到表单区域
   formCardRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
@@ -231,6 +284,25 @@ async function handleVerify(id: number) {
     verifyingId.value = null
   }
 }
+
+async function handleOverride(keyId: number, data: { enable_thinking?: boolean | null; max_context_tokens?: number | null }) {
+  try {
+    await setKeyOverride(keyId, data)
+    // Optimistically update the local key state
+    const key = store.apiKeys.find(k => k.id === keyId)
+    if (key) {
+      if (data.enable_thinking !== undefined && data.enable_thinking !== null) {
+        key.enable_thinking = data.enable_thinking
+      }
+      if (data.max_context_tokens !== undefined && data.max_context_tokens !== null) {
+        key.max_context_tokens = data.max_context_tokens
+      }
+    }
+  } catch (e: any) {
+    // Reload keys to revert optimistic update
+    await store.loadKeys()
+  }
+}
 </script>
 
 <style scoped>
@@ -257,6 +329,17 @@ async function handleVerify(id: number) {
   color: #8e8e9a;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.admin-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: #b0b0b8;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .edit-label {
@@ -365,5 +448,24 @@ async function handleVerify(id: number) {
   flex-shrink: 0;
   margin-left: 14px;
   align-items: center;
+}
+
+.override-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eeeef2;
+}
+
+.override-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.override-label {
+  font-size: 12px;
+  color: #8e8e9a;
 }
 </style>
