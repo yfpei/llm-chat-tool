@@ -250,6 +250,10 @@
         />
         </div>
         <div v-if="done" class="download-area">
+          <div class="elapsed-info">
+            <span>跑批完成</span>
+            <span class="elapsed-time">{{ elapsedText }}</span>
+          </div>
           <n-button type="success" size="large" @click="download">
             下载结果文件
           </n-button>
@@ -294,6 +298,7 @@ const results = ref<ResultRow[]>([])
 const reuploadKey = ref(0)
 const runningTaskId = ref<string | null>(null)
 const progress = reactive({ completed: 0, total: 0 })
+const startTime = ref(0)
 let abortController: AbortController | null = null
 const runningResults = new Map<string, ResultRow[]>()
 
@@ -323,6 +328,15 @@ function addResult(entry: ResultRow) {
     }, 80)
   }
 }
+
+const elapsedText = computed(() => {
+  if (!done.value || !startTime.value) return ''
+  const sec = Math.round((Date.now() - startTime.value) / 1000)
+  if (sec < 60) return `${sec} 秒`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m} 分 ${s} 秒`
+})
 
 function clearResults() {
   if (batchTimer) {
@@ -867,6 +881,7 @@ async function startBatch() {
   progress.total = 0
   done.value = false
   batchError.value = ''
+  startTime.value = Date.now()
   running.value = true
   runningTaskId.value = batchStore.currentTask!.id
 
@@ -1277,6 +1292,27 @@ function download() {
 
 .download-area {
   margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.elapsed-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #333;
+}
+
+.elapsed-time {
+  background: #f0f4ff;
+  color: #3c5de6;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
 }
 
 /* ── Prompt overlay textarea + slash picker ──── */

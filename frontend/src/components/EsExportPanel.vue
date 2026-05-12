@@ -196,6 +196,10 @@
             :height="24"
           />
         </div>
+        <div v-if="exportDone" class="elapsed-info">
+          <span>导出完成</span>
+          <span class="elapsed-time">{{ exportElapsedText }}</span>
+        </div>
         <p v-if="downloadError" class="export-error">{{ downloadError }}</p>
       </div>
     </div>
@@ -260,7 +264,17 @@ const previewData = reactive({ total: 0, rows: [] as Record<string, unknown>[], 
 const downloading = ref(false)
 const downloadError = ref('')
 const downloadProgress = reactive({ completed: 0, total: 0 })
+const exportStartTime = ref(0)
+const exportDone = ref(false)
 let abortController: AbortController | null = null
+const exportElapsedText = computed(() => {
+  if (!exportDone.value || !exportStartTime.value) return ''
+  const sec = Math.round((Date.now() - exportStartTime.value) / 1000)
+  if (sec < 60) return `${sec} 秒`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m} 分 ${s} 秒`
+})
 
 // ── Computed ────────────────────────────────
 const indexOptions = computed(() => indices.value.map((i) => ({ label: i, value: i })))
@@ -515,6 +529,8 @@ async function handleDownload() {
   downloadError.value = ''
   downloadProgress.completed = 0
   downloadProgress.total = 0
+  exportDone.value = false
+  exportStartTime.value = Date.now()
   downloading.value = true
 
   const body = {
@@ -562,6 +578,7 @@ async function handleDownload() {
               // Auto-download the file using the direct file_id endpoint
               await triggerFileDownload(event.file_id)
               downloading.value = false
+              exportDone.value = true
             } else if (event.type === 'error') {
               downloadError.value = event.content || '导出失败'
               downloading.value = false
@@ -1030,6 +1047,24 @@ watch(() => store.currentTask, (task) => {
 .export-error {
   margin-top: 12px;
   color: #ef4444;
+  font-size: 13px;
+}
+
+.elapsed-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #333;
+  margin-top: 12px;
+}
+
+.elapsed-time {
+  background: #f0f4ff;
+  color: #3c5de6;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-weight: 600;
   font-size: 13px;
 }
 </style>
