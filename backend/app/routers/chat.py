@@ -2,11 +2,13 @@ import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db, async_session
-from app.models import Message, Conversation
+from app.deps import get_current_user
+from app.models import Message, Conversation, User
 from app.schemas import ChatRequest
 from app.services.chat_service import get_conversation_with_key, truncate_messages
 from app.services.llm import create_provider
@@ -24,9 +26,16 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
 @router.post("/{conversation_id}")
-async def chat(conversation_id: str, req: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat(
+    conversation_id: str,
+    req: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     conv, api_key = await get_conversation_with_key(db, conversation_id)
     if not conv:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    if conv.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="会话不存在")
     if not api_key:
         raise HTTPException(status_code=400, detail="未配置 API Key，请先添加并激活一个 API Key")
