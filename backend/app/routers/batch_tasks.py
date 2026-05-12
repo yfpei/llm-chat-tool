@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import BatchTask
+from app.deps import get_current_user
+from app.models import BatchTask, User
 from app.schemas import BatchTaskUpdate, BatchTaskResponse
 from app.services import batch_service
 from app.services.batch_service import UPLOAD_DIR
@@ -15,34 +16,50 @@ router = APIRouter(prefix="/api/batch-tasks", tags=["batch-tasks"])
 
 
 def _resolve_file_path(file_id: str) -> str:
-    """Return the best file to read: _result.xlsx if it exists, otherwise .xlsx."""
     result_path = os.path.join(UPLOAD_DIR, f"{file_id}_result.xlsx")
     if os.path.exists(result_path):
         return result_path
     return os.path.join(UPLOAD_DIR, f"{file_id}.xlsx")
 
 
+def _verify_ownership(task: BatchTask | None, current_user: User):
+    if not task or task.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+
 @router.get("", response_model=list[BatchTaskResponse])
-async def list_batch_tasks(db: AsyncSession = Depends(get_db)):
+async def list_batch_tasks(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     result = await db.execute(
-        select(BatchTask).order_by(BatchTask.updated_at.desc())
+        select(BatchTask)
+        .where(BatchTask.user_id == current_user.id)
+        .order_by(BatchTask.updated_at.desc())
     )
     return list(result.scalars().all())
 
 
 @router.get("/{task_id}", response_model=BatchTaskResponse)
-async def get_batch_task(task_id: str, db: AsyncSession = Depends(get_db)):
+async def get_batch_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     task = await db.get(BatchTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     return task
 
 
 @router.put("/{task_id}", response_model=BatchTaskResponse)
-async def update_batch_task(task_id: str, data: BatchTaskUpdate, db: AsyncSession = Depends(get_db)):
+async def update_batch_task(
+    task_id: str,
+    data: BatchTaskUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     task = await db.get(BatchTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(task, field, value)
@@ -52,10 +69,13 @@ async def update_batch_task(task_id: str, data: BatchTaskUpdate, db: AsyncSessio
 
 
 @router.get("/{task_id}/preview")
-async def get_task_preview(task_id: str, db: AsyncSession = Depends(get_db)):
+async def get_task_preview(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     task = await db.get(BatchTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     file_path = _resolve_file_path(task.file_id)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="文件不存在")
@@ -64,10 +84,13 @@ async def get_task_preview(task_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{task_id}/results")
-async def get_task_results(task_id: str, db: AsyncSession = Depends(get_db)):
+async def get_task_results(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     task = await db.get(BatchTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     file_path = _resolve_file_path(task.file_id)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="文件不存在")
@@ -78,14 +101,12 @@ async def get_task_results(task_id: str, db: AsyncSession = Depends(get_db)):
     rows_iter = ws.iter_rows(values_only=True)
     headers = [str(c) if c is not None else "" for c in next(rows_iter, [])]
 
-    # Find input column indices and output column from saved config
-    input_col_indices: dict[str, int] = {}  # col_name -> col_idx
-    output_col_idx = len(headers) - 1  # fallback: last column
+    input_col_indices: dict[str, int] = {}
+    output_col_idx = len(headers) - 1
     parse_json_enabled = False
     if task.config_json:
         try:
             cfg = json.loads(task.config_json)
-            # Support both old single-column and new multi-column configs
             input_cols = cfg.get("input_columns")
             if not input_cols:
                 input_col = cfg.get("input_column", "")
@@ -100,7 +121,6 @@ async def get_task_results(task_id: str, db: AsyncSession = Depends(get_db)):
         except (json.JSONDecodeError, ValueError):
             pass
 
-    # JSON-parsed field columns are those after the output column
     parsed_field_cols: list[tuple[int, str]] = []
     if parse_json_enabled and output_col_idx < len(headers):
         for i in range(output_col_idx + 1, len(headers)):
@@ -137,10 +157,13 @@ async def get_task_results(task_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/{task_id}")
-async def delete_batch_task(task_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_batch_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     task = await db.get(BatchTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     for suffix in (".xlsx", "_original.xlsx", "_result.xlsx"):
         p = os.path.join(UPLOAD_DIR, f"{task.file_id}{suffix}")
         if os.path.exists(p):

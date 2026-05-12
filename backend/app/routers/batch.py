@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
-from app.models import BatchTask
+from app.deps import get_current_user
+from app.models import BatchTask, User
 from app.schemas import BatchUploadResponse, BatchRunRequest, FilterConfig
 from app.services import batch_service
 
@@ -41,6 +42,7 @@ async def upload_excel(
     file: UploadFile = File(...),
     task_id: str = Form(default=""),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     if not file.filename or not file.filename.lower().endswith(ALLOWED_EXTENSIONS):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx / .xls / .json / .txt 文件")
@@ -89,6 +91,12 @@ async def upload_excel(
             if os.path.exists(original):
                 os.remove(original)
             raise HTTPException(status_code=404, detail="任务不存在")
+        if task.user_id != current_user.id:
+            os.remove(xlsx_path)
+            original = xlsx_path.replace(".xlsx", "_original.xlsx")
+            if os.path.exists(original):
+                os.remove(original)
+            raise HTTPException(status_code=404, detail="任务不存在")
         # Remove old files
         old_path = os.path.join(batch_service.UPLOAD_DIR, f"{task.file_id}.xlsx")
         old_original = old_path.replace(".xlsx", "_original.xlsx")
@@ -116,6 +124,7 @@ async def upload_excel(
         columns=json.dumps(info["columns"], ensure_ascii=False),
         headers=json.dumps(info["headers"], ensure_ascii=False),
         total_rows=info["total_rows"],
+        user_id=current_user.id,
     )
     db.add(task)
     await db.commit()
@@ -125,7 +134,14 @@ async def upload_excel(
 
 
 @router.post("/run")
-async def run_batch(req: BatchRunRequest, db: AsyncSession = Depends(get_db)):
+async def run_batch(
+    req: BatchRunRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    task = await db.get(BatchTask, req.task_id)
+    if not task or task.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="任务不存在")
 
     async def event_generator():
         async for event in batch_service.run_batch(
@@ -150,11 +166,15 @@ async def run_batch(req: BatchRunRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{task_id}/filter-preview")
-async def filter_preview_endpoint(task_id: str, filter_config: FilterConfig | None = Body(None)):
+async def filter_preview_endpoint(
+    task_id: str,
+    filter_config: FilterConfig | None = Body(None),
+    current_user: User = Depends(get_current_user),
+):
     from app.database import async_session
     async with async_session() as db:
         task = await db.get(BatchTask, task_id)
-        if not task:
+        if not task or task.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="任务不存在")
         file_id = task.file_id
 
@@ -168,11 +188,15 @@ async def filter_preview_endpoint(task_id: str, filter_config: FilterConfig | No
 
 
 @router.post("/{task_id}/filter-download")
-async def download_filtered(task_id: str, filter_config: FilterConfig | None = Body(None)):
+async def download_filtered(
+    task_id: str,
+    filter_config: FilterConfig | None = Body(None),
+    current_user: User = Depends(get_current_user),
+):
     from app.database import async_session
     async with async_session() as db:
         task = await db.get(BatchTask, task_id)
-        if not task:
+        if not task or task.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="任务不存在")
         file_id = task.file_id
         filename = task.filename
@@ -221,9 +245,13 @@ async def download_filtered(task_id: str, filter_config: FilterConfig | None = B
 
 
 @router.get("/{task_id}/download")
-async def download_result(task_id: str, db: AsyncSession = Depends(get_db)):
+async def download_result(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     task = await db.get(BatchTask, task_id)
-    if not task:
+    if not task or task.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="任务不存在")
     result_path = os.path.join(batch_service.UPLOAD_DIR, f"{task.file_id}_result.xlsx")
     file_path = os.path.join(batch_service.UPLOAD_DIR, f"{task.file_id}.xlsx")
