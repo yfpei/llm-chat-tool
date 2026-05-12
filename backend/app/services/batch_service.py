@@ -6,6 +6,7 @@ import asyncio
 from typing import AsyncGenerator
 
 import openpyxl
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ApiKey, BatchTask, UserKeyOverride

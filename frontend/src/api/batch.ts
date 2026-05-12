@@ -39,6 +39,7 @@ export function runBatch(
       const reader = response.body!.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let finished = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -63,9 +64,11 @@ export function runBatch(
                   onRowError(event.row || 0, event.input || '', event.error || '未知错误')
                   break
                 case 'done':
+                  finished = true
                   onDone(event.task_id || '')
                   break
                 case 'error':
+                  finished = true
                   onError(event.content || '跑批失败')
                   break
               }
@@ -74,6 +77,11 @@ export function runBatch(
             }
           }
         }
+      }
+
+      // Stream closed without done/error — server-side crash
+      if (!finished) {
+        onError('服务器连接意外关闭，请重试')
       }
     })
     .catch((err) => {
