@@ -8,7 +8,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db, async_session
 from app.deps import get_current_user
-from app.models import Message, Conversation, User
+from app.models import Message, Conversation, User, UserKeyOverride
 from app.schemas import ChatRequest
 from app.services.chat_service import get_conversation_with_key, truncate_messages
 from app.services.llm import create_provider
@@ -39,6 +39,21 @@ async def chat(
         raise HTTPException(status_code=404, detail="会话不存在")
     if not api_key:
         raise HTTPException(status_code=400, detail="未配置 API Key，请先添加并激活一个 API Key")
+
+    # Apply user overrides for shared keys
+    if api_key.user_id is None:
+        result = await db.execute(
+            select(UserKeyOverride).where(
+                UserKeyOverride.user_id == current_user.id,
+                UserKeyOverride.api_key_id == api_key.id,
+            )
+        )
+        override = result.scalar_one_or_none()
+        if override:
+            if override.enable_thinking is not None:
+                api_key.enable_thinking = override.enable_thinking
+            if override.max_context_tokens is not None:
+                api_key.max_context_tokens = override.max_context_tokens
 
     # Save user message
     user_msg = Message(conversation_id=conversation_id, role="user", content=req.content)

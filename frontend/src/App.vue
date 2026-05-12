@@ -110,7 +110,6 @@ function navigateTo(view: string) {
 
 function handleLogout() {
   auth.logout()
-  router.push('/login')
 }
 
 const userMenuOptions = [

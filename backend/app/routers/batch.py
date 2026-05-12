@@ -156,6 +156,7 @@ async def run_batch(
             strip_thinking=req.strip_thinking,
             parse_json=req.parse_json,
             filter_config=req.filter.model_dump() if req.filter else None,
+            user_id=current_user.id,
         ):
             yield {
                 "event": "message",

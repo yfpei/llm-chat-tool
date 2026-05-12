@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 import openpyxl
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ApiKey, BatchTask
+from app.models import ApiKey, BatchTask, UserKeyOverride
 from app.services.key_service import get_decrypted_key
 from app.services.llm import create_provider
 
@@ -337,6 +337,7 @@ async def run_batch(
     strip_thinking: bool = False,
     parse_json: bool = False,
     filter_config: dict | None = None,
+    user_id: int | None = None,
 ) -> AsyncGenerator[dict, None]:
     ensure_upload_dir()
     file_path = os.path.join(UPLOAD_DIR, f"{file_id}.xlsx")
@@ -353,6 +354,21 @@ async def run_batch(
     if not api_key:
         yield {"type": "error", "content": "API Key 不存在"}
         return
+
+    # Apply user overrides for shared keys
+    if api_key.user_id is None and user_id is not None:
+        result = await db.execute(
+            select(UserKeyOverride).where(
+                UserKeyOverride.user_id == user_id,
+                UserKeyOverride.api_key_id == api_key.id,
+            )
+        )
+        override = result.scalar_one_or_none()
+        if override:
+            if override.enable_thinking is not None:
+                api_key.enable_thinking = override.enable_thinking
+            if override.max_context_tokens is not None:
+                api_key.max_context_tokens = override.max_context_tokens
 
     # Read Excel
     wb = openpyxl.load_workbook(file_path)
