@@ -23,21 +23,21 @@
           </div>
 
           <div class="sidebar-nav">
-            <button :class="['nav-item', { active: currentView === 'chat' }]" @click="currentView = 'chat'">
+            <button :class="['nav-item', { active: currentView === 'chat' }]" @click="navigateTo('chat')">
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                 <path d="M2.5 3.5h10v8h-10v-8z" stroke="currentColor" stroke-width="1.2"/>
                 <path d="M5 7h5M5 9.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
               </svg>
               对话
             </button>
-            <button :class="['nav-item', { active: currentView === 'batch' }]" @click="currentView = 'batch'">
+            <button :class="['nav-item', { active: currentView === 'batch' }]" @click="navigateTo('batch')">
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                 <rect x="1.5" y="1.5" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
                 <path d="M5 5.5h5M5 7.5h5M5 9.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
               </svg>
               跑批
             </button>
-            <button :class="['nav-item', { active: currentView === 'es-export' }]" @click="currentView = 'es-export'">
+            <button :class="['nav-item', { active: currentView === 'es-export' }]" @click="navigateTo('es-export')">
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                 <ellipse cx="7.5" cy="5" rx="5.5" ry="2.5" stroke="currentColor" stroke-width="1.2"/>
                 <path d="M2 5v5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V5" stroke="currentColor" stroke-width="1.2"/>
@@ -49,21 +49,24 @@
 
           <SessionList :view="currentView" />
           <div class="sidebar-footer">
-            <div class="footer-key" @click="store.showSettings = true">
-              <div class="key-dot" :class="{ active: store.activeKey() }"></div>
-              <span class="key-label">{{ store.activeKey()?.name || '未配置 API Key' }}</span>
-              <svg class="footer-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
+            <n-dropdown trigger="click" :options="auth.isAdmin ? adminMenuOptions : userMenuOptions" @select="handleUserSelect">
+              <div class="footer-user">
+                <div class="user-avatar">{{ auth.user?.username?.charAt(0)?.toUpperCase() }}</div>
+                <span class="user-name">{{ auth.user?.username }}</span>
+                <n-tag v-if="auth.isAdmin" type="info" size="tiny" :bordered="false">管理员</n-tag>
+                <svg class="footer-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </n-dropdown>
           </div>
         </aside>
         <main class="main-area">
-          <KeepAlive>
-            <ChatWindow v-if="currentView === 'chat'" key="chat" />
-            <BatchPanel v-else-if="currentView === 'batch'" key="batch" />
-            <EsExportPanel v-else-if="currentView === 'es-export'" key="es-export" />
-          </KeepAlive>
+          <router-view v-slot="{ Component }">
+            <keep-alive>
+              <component :is="Component" />
+            </keep-alive>
+          </router-view>
         </main>
         <SettingsPanel />
       </div>
@@ -72,21 +75,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { NConfigProvider, NMessageProvider, NButton } from 'naive-ui'
+import { computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { NConfigProvider, NMessageProvider, NButton, NDropdown, NTag } from 'naive-ui'
 import { useChatStore } from './stores/chat'
 import { useBatchStore } from './stores/batch'
 import { useEsExportStore } from './stores/esExport'
+import { useAuthStore } from './stores/auth'
 import SessionList from './components/SessionList.vue'
-import ChatWindow from './components/ChatWindow.vue'
-import BatchPanel from './components/BatchPanel.vue'
-import EsExportPanel from './components/EsExportPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 
 const store = useChatStore()
 const batchStore = useBatchStore()
 const esExportStore = useEsExportStore()
-const currentView = ref<'chat' | 'batch' | 'es-export'>('chat')
+const auth = useAuthStore()
+const router = useRouter()
+const route = useRoute()
+
+const currentView = computed(() => route.name as string)
 
 function handleNewChat() {
   if (currentView.value === 'batch') {
@@ -95,6 +101,36 @@ function handleNewChat() {
     esExportStore.newTask()
   } else {
     store.newConversation()
+  }
+}
+
+function navigateTo(view: string) {
+  router.push(`/${view}`)
+}
+
+function handleLogout() {
+  auth.logout()
+  router.push('/login')
+}
+
+const userMenuOptions = [
+  { label: '修改密码', key: 'password' },
+  { label: '退出登录', key: 'logout' },
+]
+
+const adminMenuOptions = [
+  { label: '用户管理', key: 'users' },
+  { label: '修改密码', key: 'password' },
+  { label: '退出登录', key: 'logout' },
+]
+
+function handleUserSelect(key: string) {
+  if (key === 'logout') {
+    handleLogout()
+  } else if (key === 'password') {
+    router.push('/settings/password')
+  } else if (key === 'users') {
+    router.push('/admin/users')
   }
 }
 
@@ -119,7 +155,9 @@ const themeOverrides = {
 }
 
 onMounted(async () => {
-  await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks(), esExportStore.loadTasks()])
+  if (auth.isLoggedIn) {
+    await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks(), esExportStore.loadTasks()])
+  }
 })
 </script>
 
@@ -303,5 +341,37 @@ body {
   flex-direction: column;
   min-width: 0;
   background: #f5f5f7;
+}
+
+.footer-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: #b4b4be;
+}
+.footer-user:hover { background: #252530; }
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #5558e6);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.user-name {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
