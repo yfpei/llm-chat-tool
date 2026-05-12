@@ -123,7 +123,7 @@ import { useEsExportStore } from '../stores/esExport'
 import type { BatchTask, Conversation, EsExportTask } from '../types'
 
 defineProps<{
-  view: 'chat' | 'batch' | 'es-export'
+  view: string
 }>()
 
 const store = useChatStore()
