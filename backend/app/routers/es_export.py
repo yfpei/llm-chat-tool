@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from app.database import get_db
-from app.models import EsExportTask
+from app.deps import get_current_user
+from app.models import EsExportTask, User
 from app.schemas import (
     EsExportRequest,
     EsExportTaskCreate,
@@ -55,14 +56,20 @@ def _get_password(task: EsExportTask) -> str | None:
     return None
 
 
+def _verify_ownership(task: EsExportTask | None, current_user: User):
+    if not task or task.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+
 @router.post("/tasks", response_model=EsExportTaskResponse)
-async def create_task(data: EsExportTaskCreate, db: AsyncSession = Depends(get_db)):
+async def create_task(data: EsExportTaskCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = EsExportTask(
         title=data.title,
         es_host=data.es_host,
         es_username=data.es_username,
         es_password=encrypt(data.es_password) if data.es_password else None,
         status="created",
+        user_id=current_user.id,
     )
     db.add(task)
     await db.commit()
@@ -71,27 +78,27 @@ async def create_task(data: EsExportTaskCreate, db: AsyncSession = Depends(get_d
 
 
 @router.get("/tasks", response_model=list[EsExportTaskResponse])
-async def list_tasks(db: AsyncSession = Depends(get_db)):
+async def list_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(
-        select(EsExportTask).order_by(EsExportTask.created_at.desc())
+        select(EsExportTask)
+        .where(EsExportTask.user_id == current_user.id)
+        .order_by(EsExportTask.created_at.desc())
     )
     tasks = result.scalars().all()
     return [_task_to_response(t) for t in tasks]
 
 
 @router.get("/tasks/{task_id}", response_model=EsExportTaskResponse)
-async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
+async def get_task(task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     return _task_to_response(task)
 
 
 @router.put("/tasks/{task_id}", response_model=EsExportTaskResponse)
-async def update_task(task_id: str, data: EsExportTaskUpdate, db: AsyncSession = Depends(get_db)):
+async def update_task(task_id: str, data: EsExportTaskUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
 
     update_data = data.model_dump(exclude_unset=True)
     if "es_password" in update_data and update_data["es_password"]:
@@ -106,20 +113,18 @@ async def update_task(task_id: str, data: EsExportTaskUpdate, db: AsyncSession =
 
 
 @router.delete("/tasks/{task_id}")
-async def delete_task(task_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_task(task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     await db.delete(task)
     await db.commit()
     return {"ok": True}
 
 
 @router.post("/tasks/{task_id}/test-connection")
-async def test_connection(task_id: str, db: AsyncSession = Depends(get_db)):
+async def test_connection(task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     try:
         result = es_service.test_connection(task.es_host, task.es_username, _get_password(task))
         return {"ok": True, "info": result}
@@ -128,10 +133,9 @@ async def test_connection(task_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/tasks/{task_id}/indices")
-async def list_indices(task_id: str, db: AsyncSession = Depends(get_db)):
+async def list_indices(task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     try:
         indices = es_service.list_indices(task.es_host, task.es_username, _get_password(task))
         return {"indices": indices}
@@ -140,10 +144,9 @@ async def list_indices(task_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/tasks/{task_id}/mapping")
-async def get_mapping(task_id: str, index: str, db: AsyncSession = Depends(get_db)):
+async def get_mapping(task_id: str, index: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     try:
         fields = es_service.get_mapping(task.es_host, task.es_username, _get_password(task), index)
         return {"fields": fields}
@@ -152,10 +155,9 @@ async def get_mapping(task_id: str, index: str, db: AsyncSession = Depends(get_d
 
 
 @router.post("/tasks/{task_id}/preview")
-async def preview_query(task_id: str, data: EsPreviewRequest, db: AsyncSession = Depends(get_db)):
+async def preview_query(task_id: str, data: EsPreviewRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     if not task.index_name:
         raise HTTPException(status_code=400, detail="请先选择索引")
 
@@ -179,10 +181,9 @@ async def preview_query(task_id: str, data: EsPreviewRequest, db: AsyncSession =
 
 
 @router.post("/tasks/{task_id}/export")
-async def export_excel(task_id: str, data: EsExportRequest, db: AsyncSession = Depends(get_db)):
+async def export_excel(task_id: str, data: EsExportRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     if not task.index_name:
         raise HTTPException(status_code=400, detail="请先选择索引")
 
@@ -225,10 +226,9 @@ async def export_excel(task_id: str, data: EsExportRequest, db: AsyncSession = D
 
 
 @router.get("/tasks/{task_id}/download")
-async def download_excel(task_id: str, db: AsyncSession = Depends(get_db)):
+async def download_excel(task_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = await db.get(EsExportTask, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+    _verify_ownership(task, current_user)
     if not task.file_id:
         raise HTTPException(status_code=400, detail="尚未导出文件")
 
