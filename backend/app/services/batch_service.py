@@ -435,7 +435,7 @@ async def run_batch(
     plaintext_key = get_decrypted_key(api_key)
 
     use_native_thinking = api_key.enable_thinking
-    if api_key.enable_thinking and api_key.is_xinghuo_x1:
+    if api_key.enable_thinking and api_key.model_type == "x1":
         use_native_thinking = False
 
     def build_input_label(row_data: dict[str, str]) -> str:
@@ -453,7 +453,7 @@ async def run_batch(
                 api_key.model, use_native_thinking,
             )
             messages = [{"role": "user", "content": prompt}]
-            if api_key.enable_thinking and api_key.is_xinghuo_x1:
+            if api_key.enable_thinking and api_key.model_type == "x1":
                 messages.insert(0, {"role": "system", "content": XINGHUO_THINKING_PROMPT})
             full = ""
             async for chunk in provider.chat_stream(messages):

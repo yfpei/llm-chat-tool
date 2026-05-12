@@ -35,7 +35,7 @@ class ApiKey(Base):
     model = Column(String(100), nullable=False)
     max_context_tokens = Column(Integer, default=200000)
     enable_thinking = Column(Boolean, default=True)
-    is_xinghuo_x1 = Column(Boolean, default=False)
+    model_type = Column(String(20), nullable=True)
     is_active = Column(Boolean, default=False)
     is_valid = Column(Boolean, default=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

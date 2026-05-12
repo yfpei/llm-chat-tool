@@ -43,14 +43,8 @@
                   <template #unchecked>关闭</template>
                 </n-switch>
               </n-form-item>
-              <n-form-item v-if="form.enable_thinking" label="星火 X1 慢思考" :show-feedback="false">
-                <n-switch v-model:value="form.is_xinghuo_x1">
-                  <template #checked>是</template>
-                  <template #unchecked>否</template>
-                </n-switch>
-                <template #feedback>
-                  <span class="think-hint">开启后将自动注入星火专用思考提示词，模型输出以 &lt;unused6&gt;...&lt;/unused7&gt; 格式返回</span>
-                </template>
+              <n-form-item label="模型类型" :show-feedback="false">
+                <n-select v-model:value="form.model_type" :options="modelTypeOptions" placeholder="选择模型类型" clearable />
               </n-form-item>
               <div class="form-btns">
                 <n-button type="primary" :loading="saving" @click="handleSubmit" class="submit-btn">
@@ -168,6 +162,12 @@ const formCardRef = ref<HTMLElement | null>(null)
 const sharedKeys = computed(() => store.apiKeys.filter(k => k.user_id === null || k.user_id === undefined))
 const myKeys = computed(() => store.apiKeys.filter(k => k.user_id !== null && k.user_id !== undefined))
 
+const modelTypeOptions = [
+  { label: 'DeepSeek', value: 'deepseek' },
+  { label: 'Qwen (通义千问)', value: 'qwen' },
+  { label: 'X1 (星火)', value: 'x1' },
+]
+
 const providerOptions = [
   { label: 'OpenAI', value: 'openai' },
   { label: 'Anthropic', value: 'anthropic' },
@@ -186,7 +186,7 @@ const form = reactive({
   model: '',
   max_context_tokens: 200000,
   enable_thinking: true,
-  is_xinghuo_x1: false,
+  model_type: null as string | null,
 })
 
 function onProviderChange(val: string) {
@@ -203,7 +203,7 @@ function resetForm() {
   form.model = ''
   form.max_context_tokens = 200000
   form.enable_thinking = true
-  form.is_xinghuo_x1 = false
+  form.model_type = null
   editingId.value = null
   editingName.value = ''
 }
@@ -218,7 +218,7 @@ function startEdit(key: ApiKeyConfig) {
   form.model = key.model
   form.max_context_tokens = key.max_context_tokens
   form.enable_thinking = key.enable_thinking
-  form.is_xinghuo_x1 = key.is_xinghuo_x1
+  form.model_type = key.model_type || null
   formCardRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
@@ -246,7 +246,7 @@ async function handleSubmit() {
         model: form.model,
         max_context_tokens: form.max_context_tokens,
         enable_thinking: form.enable_thinking,
-        is_xinghuo_x1: form.is_xinghuo_x1,
+        model_type: form.model_type,
       }
       if (form.api_key) {
         updateData.api_key = form.api_key

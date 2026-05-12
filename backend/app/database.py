@@ -25,9 +25,9 @@ async def init_db():
 
         # --- Migrations for existing databases ---
 
-        # Add is_xinghuo_x1 column
+        # Add model_type column
         try:
-            await conn.execute(text("ALTER TABLE api_keys ADD COLUMN is_xinghuo_x1 BOOLEAN DEFAULT 0"))
+            await conn.execute(text("ALTER TABLE api_keys ADD COLUMN model_type VARCHAR(20)"))
         except Exception:
             pass
 

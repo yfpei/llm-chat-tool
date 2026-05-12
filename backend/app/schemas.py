@@ -58,7 +58,7 @@ class ApiKeyCreate(BaseModel):
     model: str
     max_context_tokens: int = 200000
     enable_thinking: bool = True
-    is_xinghuo_x1: bool = False
+    model_type: Optional[str] = None
 
 
 class ApiKeyUpdate(BaseModel):
@@ -69,7 +69,7 @@ class ApiKeyUpdate(BaseModel):
     model: Optional[str] = None
     max_context_tokens: Optional[int] = None
     enable_thinking: Optional[bool] = None
-    is_xinghuo_x1: Optional[bool] = None
+    model_type: Optional[str] = None
 
 
 class ApiKeyResponse(BaseModel):
@@ -80,7 +80,7 @@ class ApiKeyResponse(BaseModel):
     model: str
     max_context_tokens: int
     enable_thinking: bool
-    is_xinghuo_x1: bool
+    model_type: Optional[str] = None
     is_active: bool
     is_valid: bool
     user_id: Optional[int] = None

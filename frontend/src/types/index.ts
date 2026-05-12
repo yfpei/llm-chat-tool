@@ -25,7 +25,7 @@ export interface ApiKeyConfig {
   model: string
   max_context_tokens: number
   enable_thinking: boolean
-  is_xinghuo_x1: boolean
+  model_type?: string | null
   is_active: boolean
   is_valid: boolean
   user_id?: number | null
@@ -40,7 +40,7 @@ export interface ApiKeyCreateRequest {
   model: string
   max_context_tokens: number
   enable_thinking: boolean
-  is_xinghuo_x1?: boolean
+  model_type?: string | null
 }
 
 export interface Conversation {

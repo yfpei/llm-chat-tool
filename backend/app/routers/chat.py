@@ -66,10 +66,9 @@ async def chat(
     messages = [{"role": m.role, "content": m.content} for m in conv.messages]
     messages = truncate_messages(messages, api_key.max_context_tokens, api_key.provider)
 
-    # Thinking mode: for Xinghuo X1, inject the thinking prompt as a system message
-    # instead of using the provider's native thinking mechanism.
+    # For X1 model type, inject thinking prompt instead of using native thinking
     use_native_thinking = api_key.enable_thinking
-    if api_key.enable_thinking and api_key.is_xinghuo_x1:
+    if api_key.enable_thinking and api_key.model_type == "x1":
         messages.insert(0, {"role": "system", "content": XINGHUO_THINKING_PROMPT})
         use_native_thinking = False
 
