@@ -1,16 +1,16 @@
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ApiKey
+from app.models import ApiKey, UserKeyOverride
 from app.schemas import ApiKeyCreate, ApiKeyUpdate
 from app.utils.crypto import encrypt, decrypt
 
 logger = logging.getLogger(__name__)
 
 
-async def create_key(db: AsyncSession, data: ApiKeyCreate) -> ApiKey:
+async def create_key(db: AsyncSession, data: ApiKeyCreate, user_id: int | None = None) -> ApiKey:
     key = ApiKey(
         name=data.name,
         provider=data.provider,
@@ -22,6 +22,7 @@ async def create_key(db: AsyncSession, data: ApiKeyCreate) -> ApiKey:
         is_xinghuo_x1=data.is_xinghuo_x1,
         is_valid=False,
         is_active=False,
+        user_id=user_id,
     )
     db.add(key)
     await db.commit()
@@ -38,6 +39,16 @@ async def create_key(db: AsyncSession, data: ApiKeyCreate) -> ApiKey:
 
 async def list_keys(db: AsyncSession) -> list[ApiKey]:
     result = await db.execute(select(ApiKey).order_by(ApiKey.created_at.desc()))
+    return list(result.scalars().all())
+
+
+async def list_keys_for_user(db: AsyncSession, user_id: int) -> list[ApiKey]:
+    """Return shared keys (user_id=NULL) + user's own private keys."""
+    result = await db.execute(
+        select(ApiKey).where(
+            or_(ApiKey.user_id == None, ApiKey.user_id == user_id)
+        ).order_by(ApiKey.created_at.desc())
+    )
     return list(result.scalars().all())
 
 
@@ -68,13 +79,18 @@ async def delete_key(db: AsyncSession, key_id: int) -> bool:
     return True
 
 
-async def activate_key(db: AsyncSession, key_id: int) -> ApiKey | None:
+async def activate_key(db: AsyncSession, key_id: int, user_id: int) -> ApiKey | None:
     key = await db.get(ApiKey, key_id)
     if not key:
         return None
-    # Deactivate all
-    await db.execute(update(ApiKey).values(is_active=False))
-    # Activate this one
+    if key.user_id is not None and key.user_id != user_id:
+        return None
+    # Deactivate all keys visible to this user
+    await db.execute(
+        update(ApiKey).values(is_active=False).where(
+            or_(ApiKey.user_id == user_id, ApiKey.user_id == None)
+        )
+    )
     key.is_active = True
     await db.commit()
     await db.refresh(key)
@@ -165,3 +181,63 @@ async def verify_key_connectivity(provider: str, base_url: str, api_key: str, mo
 
 def get_decrypted_key(key: ApiKey) -> str:
     return decrypt(key.api_key)
+
+
+async def get_key_with_overrides(
+    db: AsyncSession, key_id: int, user_id: int
+) -> dict | None:
+    """Return key data with user's effective override values."""
+    key = await db.get(ApiKey, key_id)
+    if not key:
+        return None
+    if key.user_id is not None and key.user_id != user_id:
+        return None
+
+    override = await db.execute(
+        select(UserKeyOverride).where(
+            UserKeyOverride.user_id == user_id,
+            UserKeyOverride.api_key_id == key_id,
+        )
+    )
+    override = override.scalar_one_or_none()
+
+    return {
+        "key": key,
+        "effective_enable_thinking": override.enable_thinking if override and override.enable_thinking is not None else key.enable_thinking,
+        "effective_max_context_tokens": override.max_context_tokens if override and override.max_context_tokens is not None else key.max_context_tokens,
+    }
+
+
+async def upsert_key_override(
+    db: AsyncSession, key_id: int, user_id: int, enable_thinking: bool | None, max_context_tokens: int | None
+) -> UserKeyOverride:
+    key = await db.get(ApiKey, key_id)
+    if not key:
+        raise ValueError("Key not found")
+    if key.user_id is not None and key.user_id != user_id:
+        raise ValueError("Cannot override private keys")
+
+    override = await db.execute(
+        select(UserKeyOverride).where(
+            UserKeyOverride.user_id == user_id,
+            UserKeyOverride.api_key_id == key_id,
+        )
+    )
+    override = override.scalar_one_or_none()
+
+    if override is None:
+        override = UserKeyOverride(
+            user_id=user_id,
+            api_key_id=key_id,
+            enable_thinking=enable_thinking,
+            max_context_tokens=max_context_tokens,
+        )
+        db.add(override)
+    else:
+        if enable_thinking is not None:
+            override.enable_thinking = enable_thinking
+        if max_context_tokens is not None:
+            override.max_context_tokens = max_context_tokens
+    await db.commit()
+    await db.refresh(override)
+    return override
