@@ -24,11 +24,17 @@ UPLOAD_DIR = os.environ.get(
 
 
 def _find_result_file(file_id: str) -> str | None:
-    """Find _result.xlsx file for a given file_id."""
+    """Find result or uploaded xlsx file for a given file_id.
+
+    Prefers _result.xlsx (batch output), falls back to .xlsx (standalone eval).
+    """
     base = os.path.join(UPLOAD_DIR, file_id)
     result_path = base + "_result.xlsx"
     if os.path.exists(result_path):
         return result_path
+    upload_path = base + ".xlsx"
+    if os.path.exists(upload_path):
+        return upload_path
     return None
 
 
