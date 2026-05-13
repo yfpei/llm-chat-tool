@@ -280,8 +280,20 @@
                 </div>
                 <div class="eval-pre-item">
                   <label>评分列</label>
-                  <n-select v-model:value="evalPreLLMConfig.score_column" :options="columnOptions" size="small" />
+                  <n-auto-complete v-model:value="evalPreLLMConfig.score_column" :options="columnOptions" size="small" placeholder="输入或选择" />
                 </div>
+              </div>
+              <div class="eval-pre-item">
+                <label>变量列（可多选或手动输入）</label>
+                <n-select
+                  v-model:value="evalPreLLMConfig.input_columns"
+                  :options="columnOptions"
+                  multiple
+                  filterable
+                  tag
+                  size="small"
+                  placeholder="选择或输入列名"
+                />
               </div>
               <div class="eval-pre-item">
                 <label>评分 Prompt</label>
@@ -499,6 +511,7 @@ const evalPreClassConfig = reactive({
 const evalPreLLMConfig = reactive({
   api_key_id: 0,
   prompt: '',
+  input_columns: [] as string[],
   score_column: '',
   output_column_name: '评分',
   concurrency: 3,

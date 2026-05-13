@@ -229,6 +229,7 @@ async def run_llm_scoring(
     prompt_template: str,
     output_column_name: str,
     concurrency: int = 3,
+    input_columns: list[str] | None = None,
 ) -> AsyncGenerator[dict, None]:
     """SSE generator for LLM subjective scoring.
 
@@ -254,6 +255,13 @@ async def run_llm_scoring(
         yield {"type": "error", "message": f"列 '{score_column}' 不存在"}
         wb.close()
         return
+
+    if input_columns:
+        missing = [c for c in input_columns if c not in headers]
+        if missing:
+            yield {"type": "error", "message": f"列 {missing} 不存在"}
+            wb.close()
+            return
 
     # Read all rows
     rows_data: list[tuple[int, dict[str, str]]] = []

@@ -84,6 +84,7 @@ async def run_llm_scoring_eval(
             db, task.file_id, body.config.api_key_id,
             body.config.score_column, body.config.prompt,
             body.config.output_column_name, body.config.concurrency,
+            input_columns=body.config.input_columns,
         ):
             t = event.get("type", "error")
             if t == "error":

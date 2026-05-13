@@ -134,7 +134,7 @@
           </div>
           <div class="eval-config-item">
             <label>评分列</label>
-            <n-select v-model:value="llmConfig.score_column" :options="columnOptions" placeholder="选择要评分的列" />
+            <n-auto-complete v-model:value="llmConfig.score_column" :options="columnOptions" placeholder="输入或选择要评分的列" />
           </div>
         </div>
         <div class="eval-config-grid">
@@ -147,8 +147,25 @@
             <n-input-number v-model:value="llmConfig.concurrency" :min="1" :max="20" />
           </div>
         </div>
+        <div class="eval-config-item" style="margin-bottom: 12px;">
+          <label>变量列（可多选或手动输入，用于 Prompt 中 {{"{{列名}}"}} 引用）</label>
+          <n-select
+            v-model:value="llmConfig.input_columns"
+            :options="columnOptions"
+            multiple
+            filterable
+            tag
+            placeholder="选择或输入列名"
+          />
+        </div>
         <div class="eval-prompt">
-          <label>评分 Prompt（可用 <code v-pre>{{列名}}</code> 引用列）</label>
+          <label>
+            评分 Prompt
+            <span class="hint" v-if="llmConfig.input_columns.length">
+              可用变量：
+              <code v-for="c in llmConfig.input_columns" :key="c" class="var-tag">{{ '{{' + c + '}}' }}</code>
+            </span>
+          </label>
           <n-input v-model:value="llmConfig.prompt" type="textarea" :rows="8" placeholder="请根据以下标准对回答进行评分..." />
         </div>
         <n-button type="primary" :loading="llmRunning" @click="runLLMScoring" :disabled="!llmConfig.api_key_id || !llmConfig.score_column || !llmConfig.prompt.trim()">
@@ -265,6 +282,7 @@ const llmProgress = reactive({ completed: 0, total: 0 })
 const llmConfig = reactive<LLMScoringEvalConfig>({
   api_key_id: 0,
   prompt: '',
+  input_columns: [],
   score_column: '',
   output_column_name: '评分',
   concurrency: 3,
@@ -406,20 +424,23 @@ const llmScoreColumns = [
   },
 ]
 
+let autoRunDone = false
+
 // ── Load saved eval config ──
 watch(() => props.savedEvalConfig, (json) => {
-  if (!json) return
+  if (!json || autoRunDone) return
   try {
     const cfg = JSON.parse(json)
     if (cfg.enabled) {
-      if (cfg.classification) {
+      if (cfg.classification && cfg.classification.label_column) {
         classConfig.label_column = cfg.classification.label_column || ''
         classConfig.predict_column = cfg.classification.predict_column || ''
         classConfig.mappings = cfg.classification.mappings || []
       }
-      if (cfg.llm_scoring) {
+      if (cfg.llm_scoring && cfg.llm_scoring.api_key_id) {
         llmConfig.api_key_id = cfg.llm_scoring.api_key_id || 0
         llmConfig.prompt = cfg.llm_scoring.prompt || ''
+        llmConfig.input_columns = cfg.llm_scoring.input_columns || []
         llmConfig.score_column = cfg.llm_scoring.score_column || ''
         llmConfig.output_column_name = cfg.llm_scoring.output_column_name || '评分'
         llmConfig.concurrency = cfg.llm_scoring.concurrency || 3
@@ -428,12 +449,40 @@ watch(() => props.savedEvalConfig, (json) => {
         if (cfg.method === 'both') activeTab.value = 'classification'
         else activeTab.value = cfg.method
       }
+
+      // Auto-run if embedded (not standalone) and has valid config
+      if (!props.standalone) {
+        autoRunDone = true
+        const runAuto = async () => {
+          if (cfg.classification && cfg.classification.label_column && cfg.classification.predict_column) {
+            await runClassification()
+          }
+          if (cfg.llm_scoring && cfg.llm_scoring.api_key_id && cfg.llm_scoring.score_column) {
+            activeTab.value = 'llm_scoring'
+            runLLMScoring()
+          }
+        }
+        runAuto()
+      }
     }
   } catch { /* ignore */ }
 }, { immediate: true })
 
-// ── Check existing results ──
+// ── Reset state on taskId change ──
 watch(() => props.taskId, async (tid) => {
+  // Reset all state when switching tasks
+  classResult.value = null
+  classError.value = ''
+  classRunning.value = false
+  llmScores.value = []
+  llmScoringDone.value = false
+  llmRunning.value = false
+  llmError.value = ''
+  llmAvgScore.value = 0
+  llmProgress.completed = 0
+  llmProgress.total = 0
+  hasResultFile.value = false
+
   if (!tid) return
   const has = await evalApi.checkClassificationResult(tid)
   hasResultFile.value = has
@@ -557,6 +606,21 @@ watch(() => props.taskId, async (tid) => {
   background: rgba(99, 102, 241, 0.08);
   padding: 1px 4px;
   border-radius: 3px;
+}
+
+.eval-prompt label .hint {
+  font-size: 11px;
+  color: #8e8e9a;
+  margin-left: 4px;
+}
+
+.var-tag {
+  font-size: 11px;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-right: 4px;
 }
 
 .eval-error {

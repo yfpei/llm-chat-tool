@@ -170,6 +170,7 @@ export interface ClassificationEvalConfig {
 export interface LLMScoringEvalConfig {
   api_key_id: number
   prompt: string
+  input_columns: string[]
   score_column: string
   output_column_name: string
   concurrency: number

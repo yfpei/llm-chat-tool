@@ -296,6 +296,7 @@ class ClassificationEvalConfig(BaseModel):
 class LLMScoringEvalConfig(BaseModel):
     api_key_id: int
     prompt: str
+    input_columns: list[str] = []
     score_column: str
     output_column_name: str = "评分"
     concurrency: int = 3

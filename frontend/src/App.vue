@@ -37,6 +37,13 @@
               </svg>
               跑批
             </button>
+            <button :class="['nav-item', { active: currentView === 'eval' }]" @click="navigateTo('eval')">
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <path d="M2.5 1.5h10L7.5 5 2.5 1.5z" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M2.5 5l5 3.5 5-3.5M2.5 7.5l5 3.5 5-3.5M2.5 10l5 3.5 5-3.5" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+              评测
+            </button>
             <button :class="['nav-item', { active: currentView === 'es-export' }]" @click="navigateTo('es-export')">
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                 <ellipse cx="7.5" cy="5" rx="5.5" ry="2.5" stroke="currentColor" stroke-width="1.2"/>
