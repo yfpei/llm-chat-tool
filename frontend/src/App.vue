@@ -18,7 +18,7 @@
                   <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
               </template>
-              {{ currentView === 'batch' ? '新任务' : currentView === 'es-export' ? '新导出' : '新对话' }}
+              {{ currentView === 'batch' ? '新任务' : currentView === 'eval' ? '新评测' : currentView === 'es-export' ? '新导出' : '新对话' }}
             </n-button>
           </div>
 
@@ -102,7 +102,7 @@ const route = useRoute()
 const currentView = computed(() => route.name as string)
 
 function handleNewChat() {
-  if (currentView.value === 'batch') {
+  if (currentView.value === 'batch' || currentView.value === 'eval') {
     batchStore.newBatchTask()
   } else if (currentView.value === 'es-export') {
     esExportStore.newTask()

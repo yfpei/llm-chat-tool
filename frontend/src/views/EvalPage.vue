@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { NButton, NUpload, useMessage } from 'naive-ui'
 import { useBatchStore } from '../stores/batch'
 import * as batchApi from '../api/batch'
@@ -56,6 +56,21 @@ const uploadError = ref('')
 const uploadResult = ref<UploadResponse | null>(null)
 const taskId = ref('')
 const batchTasks = ref<any[]>([])
+
+// React to store changes (new task / select task from sidebar)
+watch(() => batchStore.uploadResult, (val) => {
+  if (!val) {
+    uploadResult.value = null
+    taskId.value = ''
+  }
+})
+
+watch(() => batchStore.currentTask, (task) => {
+  if (!task) {
+    uploadResult.value = null
+    taskId.value = ''
+  }
+})
 
 async function handleUpload(opts: { file: any; fileList: any[] }) {
   uploadError.value = ''
