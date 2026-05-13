@@ -46,6 +46,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/eval',
+      name: 'eval',
+      component: () => import('../views/EvalPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/es-export',
       name: 'es-export',
       component: () => import('../views/EsExportPage.vue'),
