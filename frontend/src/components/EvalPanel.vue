@@ -148,7 +148,7 @@
           </div>
         </div>
         <div class="eval-config-item" style="margin-bottom: 12px;">
-          <label>变量列（可多选或手动输入，用于 Prompt 中 {{"{{列名}}"}} 引用）</label>
+          <label>变量列（可多选或手动输入，用于 Prompt 中 <code v-pre>{{列名}}</code> 引用）</label>
           <n-select
             v-model:value="llmConfig.input_columns"
             :options="columnOptions"
