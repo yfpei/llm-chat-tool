@@ -28,7 +28,7 @@
           </div>
           <div class="eval-config-item">
             <label>模型结果列</label>
-            <n-select v-model:value="classConfig.predict_column" :options="columnOptions" placeholder="选择结果列" />
+            <n-auto-complete v-model:value="classConfig.predict_column" :options="columnOptions" placeholder="输入或选择结果列" />
           </div>
         </div>
 
@@ -196,7 +196,7 @@
 import { ref, reactive, computed, h, watch } from 'vue'
 import {
   NButton, NSelect, NInput, NInputNumber, NDataTable, NProgress, NTag,
-  useMessage,
+  NAutoComplete, useMessage,
 } from 'naive-ui'
 import { useChatStore } from '../stores/chat'
 import * as evalApi from '../api/eval'

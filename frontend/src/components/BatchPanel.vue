@@ -252,7 +252,7 @@
                 </div>
                 <div class="eval-pre-item">
                   <label>模型结果列</label>
-                  <n-select v-model:value="evalPreClassConfig.predict_column" :options="columnOptions" size="small" />
+                  <n-auto-complete v-model:value="evalPreClassConfig.predict_column" :options="columnOptions" size="small" placeholder="输入或选择结果列" />
                 </div>
               </div>
               <div class="eval-pre-mappings">
@@ -345,7 +345,7 @@ import { ref, reactive, computed, h, watch, nextTick } from 'vue'
 import {
   NButton, NUpload, NSelect, NInput, NInputNumber,
   NDataTable, NProgress, NTag, NCheckbox, NRadioGroup, NRadio,
-  useMessage,
+  NAutoComplete, useMessage,
 } from 'naive-ui'
 import { useChatStore } from '../stores/chat'
 import { useBatchStore } from '../stores/batch'
