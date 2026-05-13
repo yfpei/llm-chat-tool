@@ -163,7 +163,7 @@
             评分 Prompt
             <span class="hint" v-if="llmConfig.input_columns.length">
               可用变量：
-              <code v-for="c in llmConfig.input_columns" :key="c" class="var-tag">{{ '{{' + c + '}}' }}</code>
+              <code v-for="c in llmConfig.input_columns" :key="c" class="var-tag">{{ varLabel(c) }}</code>
             </span>
           </label>
           <n-input v-model:value="llmConfig.prompt" type="textarea" :rows="8" placeholder="请根据以下标准对回答进行评分..." />
@@ -292,6 +292,10 @@ let llmAbortController: AbortController | null = null
 const hasResultFile = ref(false)
 
 // ── Methods ──
+
+function varLabel(col: string) {
+  return '{{' + col + '}}'
+}
 
 function addMapping() {
   classConfig.mappings.push({ model_output: '', label_value: '' })
