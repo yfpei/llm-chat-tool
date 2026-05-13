@@ -224,6 +224,72 @@
           {{ running ? '跑批中...' : '开始跑批' }}
         </n-button>
         <n-button v-if="running" @click="stopBatch" style="margin-left: 10px">停止</n-button>
+
+        <!-- Eval pre-config (collapsible, Step 3) -->
+        <div class="eval-pre-config" v-if="uploadResult">
+          <div class="eval-pre-header" @click="showEvalPreConfig = !showEvalPreConfig">
+            <span :class="['eval-pre-arrow', { open: showEvalPreConfig }]">▶</span>
+            <span class="eval-pre-title">评测配置（可选，跑批完成后自动执行）</span>
+            <span v-if="!evalPreConfig.enabled" class="eval-pre-status off">未启用</span>
+            <span v-else class="eval-pre-status on">✓ 已启用</span>
+          </div>
+          <div v-if="showEvalPreConfig" class="eval-pre-body">
+            <div class="eval-pre-tabs">
+              <div
+                v-for="tab in evalPreTabs"
+                :key="tab.key"
+                :class="['eval-pre-tab', { active: evalPreActiveTab === tab.key }]"
+                @click="evalPreActiveTab = tab.key"
+              >{{ tab.label }}</div>
+            </div>
+
+            <!-- Classification pre-config -->
+            <div v-if="evalPreActiveTab === 'classification'" class="eval-pre-tab-content">
+              <div class="eval-pre-grid">
+                <div class="eval-pre-item">
+                  <label>标签列（答案）</label>
+                  <n-select v-model:value="evalPreClassConfig.label_column" :options="columnOptions" size="small" />
+                </div>
+                <div class="eval-pre-item">
+                  <label>模型结果列</label>
+                  <n-select v-model:value="evalPreClassConfig.predict_column" :options="columnOptions" size="small" />
+                </div>
+              </div>
+              <div class="eval-pre-mappings">
+                <div class="eval-pre-mappings-header">
+                  <span>值映射</span>
+                  <n-button text size="tiny" type="primary" @click="addEvalPreMapping">+ 添加映射</n-button>
+                </div>
+                <div v-if="evalPreClassConfig.mappings.length > 0" class="eval-pre-mapping-table">
+                  <div v-for="(m, i) in evalPreClassConfig.mappings" :key="i" class="eval-pre-mapping-row">
+                    <n-input v-model:value="m.model_output" size="tiny" placeholder="模型输出" />
+                    <span class="eval-pre-mapping-arrow">→</span>
+                    <n-input v-model:value="m.label_value" size="tiny" placeholder="Label" />
+                    <n-button text size="tiny" type="error" @click="evalPreClassConfig.mappings.splice(i, 1)">✕</n-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- LLM scoring pre-config -->
+            <div v-if="evalPreActiveTab === 'llm_scoring'" class="eval-pre-tab-content">
+              <div class="eval-pre-grid">
+                <div class="eval-pre-item">
+                  <label>评分模型</label>
+                  <n-select v-model:value="evalPreLLMConfig.api_key_id" :options="keyOptions" size="small" />
+                </div>
+                <div class="eval-pre-item">
+                  <label>评分列</label>
+                  <n-select v-model:value="evalPreLLMConfig.score_column" :options="columnOptions" size="small" />
+                </div>
+              </div>
+              <div class="eval-pre-item">
+                <label>评分 Prompt</label>
+                <n-input v-model:value="evalPreLLMConfig.prompt" type="textarea" :rows="4" size="small" placeholder="请根据以下标准评分..." />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Step 4: Progress + Results -->
@@ -260,6 +326,16 @@
         </div>
         <p v-if="batchError" class="batch-error">{{ batchError }}</p>
       </div>
+
+      <!-- Step 5: Evaluation -->
+      <div class="step" v-if="done && uploadResult">
+        <EvalPanel
+          :task-id="batchStore.currentTask!.id"
+          :columns="uploadResult.columns"
+          :file-id="uploadResult.file_id"
+          :saved-eval-config="batchStore.currentTask?.eval_config_json"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -275,6 +351,7 @@ import { useChatStore } from '../stores/chat'
 import { useBatchStore } from '../stores/batch'
 import * as batchApi from '../api/batch'
 import * as batchTasksApi from '../api/batchTasks'
+import EvalPanel from './EvalPanel.vue'
 import { authFetch } from '../api/client'
 import type { PreviewRow, FilterConfig, FilterCondition } from '../types'
 
@@ -406,6 +483,39 @@ const filter = reactive<FilterConfig>({
   groups: [{ logic: 'and', conditions: [] }],
   logic: 'and',
 })
+
+// Eval pre-config in Step 3
+const showEvalPreConfig = ref(false)
+const evalPreActiveTab = ref<'classification' | 'llm_scoring'>('classification')
+const evalPreTabs = [
+  { key: 'classification' as const, label: '客观评测' },
+  { key: 'llm_scoring' as const, label: '主观评测' },
+]
+const evalPreClassConfig = reactive({
+  label_column: '',
+  predict_column: '',
+  mappings: [] as { model_output: string; label_value: string }[],
+})
+const evalPreLLMConfig = reactive({
+  api_key_id: 0,
+  prompt: '',
+  score_column: '',
+  output_column_name: '评分',
+  concurrency: 3,
+})
+const evalPreConfig = computed(() => ({
+  enabled: evalPreClassConfig.label_column !== '' || evalPreLLMConfig.api_key_id !== 0,
+  method: (evalPreClassConfig.label_column !== '' && evalPreLLMConfig.api_key_id !== 0) ? 'both'
+    : evalPreClassConfig.label_column !== '' ? 'classification'
+    : evalPreLLMConfig.api_key_id !== 0 ? 'llm_scoring'
+    : 'classification',
+  classification: evalPreClassConfig.label_column ? { ...evalPreClassConfig } : null,
+  llm_scoring: evalPreLLMConfig.api_key_id ? { ...evalPreLLMConfig } : null,
+}))
+
+function addEvalPreMapping() {
+  evalPreClassConfig.mappings.push({ model_output: '', label_value: '' })
+}
 
 const noValueOperators = ['not_empty', 'is_empty']
 
@@ -915,6 +1025,13 @@ async function startBatch() {
     filter: { ...filter },
     batch_start_time: startTime.value,
   })
+
+  // Save eval pre-config
+  if (evalPreConfig.value.enabled) {
+    await batchTasksApi.updateBatchTask(myTaskId, {
+      eval_config_json: JSON.stringify(evalPreConfig.value),
+    })
+  }
 
   // Track results per running task for restoration when switching back
   const taskResults: ResultRow[] = []
@@ -1504,5 +1621,130 @@ async function download() {
   margin-top: 12px;
   color: #ef4444;
   font-size: 13px;
+}
+
+/* Eval pre-config in Step 3 */
+.eval-pre-config {
+  border: 1px solid #e0e0e6;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 16px;
+}
+
+.eval-pre-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: #f8f8fa;
+  cursor: pointer;
+}
+
+.eval-pre-header:hover {
+  background: #f0f0f4;
+}
+
+.eval-pre-arrow {
+  font-size: 14px;
+  color: #999;
+  transition: transform 0.2s;
+  margin-right: 8px;
+}
+
+.eval-pre-arrow.open {
+  transform: rotate(90deg);
+}
+
+.eval-pre-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4b4b60;
+  flex: 1;
+}
+
+.eval-pre-status {
+  font-size: 12px;
+}
+
+.eval-pre-status.off {
+  color: #999;
+}
+
+.eval-pre-status.on {
+  color: #22c55e;
+}
+
+.eval-pre-body {
+  padding: 16px;
+  border-top: 1px solid #e0e0e6;
+}
+
+.eval-pre-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.eval-pre-tab {
+  padding: 6px 14px;
+  background: #f0f0f4;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.eval-pre-tab.active {
+  background: #6366f1;
+  color: #fff;
+}
+
+.eval-pre-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.eval-pre-item {
+  margin-bottom: 12px;
+}
+
+.eval-pre-item label {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.eval-pre-mappings {
+  margin-top: 12px;
+}
+
+.eval-pre-mappings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.eval-pre-mapping-table {
+  border: 1px solid #e0e0e6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.eval-pre-mapping-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr 24px;
+  gap: 6px;
+  padding: 4px 8px;
+  align-items: center;
+}
+
+.eval-pre-mapping-arrow {
+  font-size: 11px;
+  color: #999;
 }
 </style>
