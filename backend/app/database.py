@@ -60,3 +60,9 @@ async def init_db():
             await conn.execute(text("ALTER TABLE es_export_tasks ADD COLUMN user_id INTEGER REFERENCES users(id)"))
         except Exception:
             pass
+
+        # Add eval_config_json column
+        try:
+            await conn.execute(text("ALTER TABLE batch_tasks ADD COLUMN eval_config_json TEXT"))
+        except Exception:
+            pass

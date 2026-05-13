@@ -101,6 +101,7 @@ class BatchTask(Base):
     total_rows = Column(Integer, default=0)
     status = Column(String(20), default="uploaded")
     config_json = Column(Text, nullable=True)
+    eval_config_json = Column(Text, nullable=True)
     progress_completed = Column(Integer, default=0)
     progress_total = Column(Integer, default=0)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
