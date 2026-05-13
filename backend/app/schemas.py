@@ -202,6 +202,7 @@ class BatchTaskCreate(BaseModel):
 class BatchTaskUpdate(BaseModel):
     title: Optional[str] = None
     config_json: Optional[str] = None
+    eval_config_json: Optional[str] = None
     status: Optional[str] = None
     progress_completed: Optional[int] = None
     progress_total: Optional[int] = None
@@ -277,3 +278,67 @@ class EsExportRequest(BaseModel):
     query_dsl: Optional[dict] = None
     output_fields: Optional[list[str]] = None
     top_n: Optional[int] = None
+
+
+# --- Eval Schemas ---
+
+class MappingRule(BaseModel):
+    model_output: str
+    label_value: str
+
+
+class ClassificationEvalConfig(BaseModel):
+    label_column: str
+    predict_column: str
+    mappings: list[MappingRule] = []
+
+
+class LLMScoringEvalConfig(BaseModel):
+    api_key_id: int
+    prompt: str
+    score_column: str
+    output_column_name: str = "评分"
+    concurrency: int = 3
+
+
+class EvalConfig(BaseModel):
+    enabled: bool = False
+    method: str = "classification"  # "classification" | "llm_scoring" | "both"
+
+    classification: ClassificationEvalConfig | None = None
+    llm_scoring: LLMScoringEvalConfig | None = None
+
+
+class ClassificationEvalRequest(BaseModel):
+    task_id: str
+    config: ClassificationEvalConfig
+
+
+class LLMScoringEvalRequest(BaseModel):
+    task_id: str
+    config: LLMScoringEvalConfig
+
+
+class PerClassMetric(BaseModel):
+    class_name: str
+    precision: float
+    recall: float
+    f1: float
+
+
+class AvgMetric(BaseModel):
+    precision: float
+    recall: float
+    f1: float
+
+
+class ClassificationEvalResponse(BaseModel):
+    accuracy: float
+    total_samples: int
+    num_classes: int
+    confusion_matrix: list[list[int]]
+    labels: list[str]
+    per_class: list[PerClassMetric]
+    micro_avg: AvgMetric
+    macro_avg: AvgMetric
+    skipped_count: int = 0
