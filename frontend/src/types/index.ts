@@ -147,10 +147,75 @@ export interface BatchTask {
   total_rows: number
   status: 'uploaded' | 'running' | 'completed' | 'failed'
   config_json: string | null
+  eval_config_json: string | null
   progress_completed: number
   progress_total: number
   created_at: string
   updated_at: string
+}
+
+// ── Eval Types ────────────────────────────────
+
+export interface MappingRule {
+  model_output: string
+  label_value: string
+}
+
+export interface ClassificationEvalConfig {
+  label_column: string
+  predict_column: string
+  mappings: MappingRule[]
+}
+
+export interface LLMScoringEvalConfig {
+  api_key_id: number
+  prompt: string
+  score_column: string
+  output_column_name: string
+  concurrency: number
+}
+
+export interface EvalConfigData {
+  enabled: boolean
+  method: 'classification' | 'llm_scoring' | 'both'
+  classification?: ClassificationEvalConfig | null
+  llm_scoring?: LLMScoringEvalConfig | null
+}
+
+export interface PerClassMetric {
+  class_name: string
+  precision: number
+  recall: number
+  f1: number
+}
+
+export interface AvgMetric {
+  precision: number
+  recall: number
+  f1: number
+}
+
+export interface ClassificationEvalResult {
+  accuracy: number
+  total_samples: number
+  num_classes: number
+  confusion_matrix: number[][]
+  labels: string[]
+  per_class: PerClassMetric[]
+  micro_avg: AvgMetric
+  macro_avg: AvgMetric
+  skipped_count: number
+}
+
+export interface LLMScoringEvalEvent {
+  type: 'progress' | 'row_result' | 'row_error' | 'done' | 'error'
+  completed?: number
+  total?: number
+  row?: number
+  score?: string
+  error?: string
+  avg_score?: number
+  message?: string
 }
 
 // ── ES Export Types ───────────────────────────
