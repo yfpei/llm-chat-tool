@@ -148,7 +148,7 @@
           </div>
         </div>
         <div class="eval-prompt">
-          <label>评分 Prompt（可用 <code>{{"{{列名}}"}}</code> 引用列）</label>
+          <label>评分 Prompt（可用 <code v-pre>{{列名}}</code> 引用列）</label>
           <n-input v-model:value="llmConfig.prompt" type="textarea" :rows="8" placeholder="请根据以下标准对回答进行评分..." />
         </div>
         <n-button type="primary" :loading="llmRunning" @click="runLLMScoring" :disabled="!llmConfig.api_key_id || !llmConfig.score_column || !llmConfig.prompt.trim()">
