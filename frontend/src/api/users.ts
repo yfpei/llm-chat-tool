@@ -33,7 +33,11 @@ export async function updateUser(id: number, data: Record<string, unknown>): Pro
 }
 
 export async function deleteUser(id: number): Promise<void> {
-  await authFetch(`/api/users/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`/api/users/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || '删除用户失败')
+  }
 }
 
 export async function resetUserPassword(id: number): Promise<string> {

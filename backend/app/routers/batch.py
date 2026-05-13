@@ -201,6 +201,7 @@ async def download_filtered(
             raise HTTPException(status_code=404, detail="任务不存在")
         file_id = task.file_id
         filename = task.filename
+        task_title = task.title
 
     original_path = os.path.join(batch_service.UPLOAD_DIR, f"{file_id}_original.xlsx")
     file_path = original_path if os.path.exists(original_path) else os.path.join(batch_service.UPLOAD_DIR, f"{file_id}.xlsx")
@@ -236,7 +237,7 @@ async def download_filtered(
     wb_out.save(out_path)
     wb_out.close()
 
-    name, _ = os.path.splitext(filename)
+    name = task_title if task_title else os.path.splitext(filename)[0]
     download_name = f"{name}_筛选结果.xlsx"
     return FileResponse(
         path=out_path,
@@ -260,7 +261,7 @@ async def download_result(
         file_path = result_path
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="结果文件不存在")
-    name, ext = os.path.splitext(task.filename)
+    name = task.title if task.title else os.path.splitext(task.filename)[0]
     download_name = f"{name}_结果.xlsx"
     return FileResponse(
         path=file_path,

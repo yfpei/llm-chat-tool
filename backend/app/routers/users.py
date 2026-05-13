@@ -61,10 +61,23 @@ async def update_user(
         user.username = data.username
     if data.password is not None:
         user.password_hash = hash_password(data.password)
+    # Remember original state before applying changes
+    was_active_admin = user.role == "admin" and user.is_active
     if data.role is not None:
         user.role = data.role
     if data.is_active is not None:
         user.is_active = data.is_active
+    # Prevent disabling/demoting the last active admin
+    if was_active_admin and (user.role != "admin" or not user.is_active):
+        result = await db.execute(
+            select(User).where(
+                User.role == "admin",
+                User.is_active == True,
+                User.id != user_id,
+            )
+        )
+        if not result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="不能禁用或降级最后一个活跃管理员")
     await db.commit()
     await db.refresh(user)
     return user

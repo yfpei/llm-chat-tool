@@ -105,8 +105,12 @@ async function handleCreate() {
 }
 
 async function handleToggleActive(row: UserInfo) {
-  await usersApi.updateUser(row.id, { is_active: !row.is_active })
-  await loadUsers()
+  try {
+    await usersApi.updateUser(row.id, { is_active: !row.is_active })
+    await loadUsers()
+  } catch (e: any) {
+    message.error(e.message || '操作失败')
+  }
 }
 
 async function handleResetPassword(row: UserInfo) {
@@ -119,9 +123,13 @@ async function handleResetPassword(row: UserInfo) {
 }
 
 async function handleDelete(id: number) {
-  await usersApi.deleteUser(id)
-  message.success('用户已删除')
-  await loadUsers()
+  try {
+    await usersApi.deleteUser(id)
+    message.success('用户已删除')
+    await loadUsers()
+  } catch (e: any) {
+    message.error(e.message || '删除失败')
+  }
 }
 
 onMounted(() => loadUsers())

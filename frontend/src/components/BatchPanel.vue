@@ -275,6 +275,7 @@ import { useChatStore } from '../stores/chat'
 import { useBatchStore } from '../stores/batch'
 import * as batchApi from '../api/batch'
 import * as batchTasksApi from '../api/batchTasks'
+import { authFetch } from '../api/client'
 import type { PreviewRow, FilterConfig, FilterCondition } from '../types'
 
 interface ResultRow {
@@ -299,6 +300,7 @@ const reuploadKey = ref(0)
 const runningTaskId = ref<string | null>(null)
 const progress = reactive({ completed: 0, total: 0 })
 const startTime = ref(0)
+const elapsedSeconds = ref(0)
 const abortControllers = new Map<string, AbortController>()
 const runningResults = new Map<string, ResultRow[]>()
 
@@ -330,12 +332,24 @@ function addResult(entry: ResultRow) {
 }
 
 const elapsedText = computed(() => {
-  if (!done.value || !startTime.value) return ''
-  const sec = Math.round((Date.now() - startTime.value) / 1000)
-  if (sec < 60) return `${sec} 秒`
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  return `${m} 分 ${s} 秒`
+  if (!done.value) return ''
+  // Use stored elapsed time if available (persisted in config_json)
+  if (elapsedSeconds.value > 0) {
+    const sec = elapsedSeconds.value
+    if (sec < 60) return `${sec} 秒`
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return `${m} 分 ${s} 秒`
+  }
+  // Live computation (right after batch finishes, before config_json is updated by watcher)
+  if (startTime.value) {
+    const sec = Math.round((Date.now() - startTime.value) / 1000)
+    if (sec < 60) return `${sec} 秒`
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return `${m} 分 ${s} 秒`
+  }
+  return ''
 })
 
 function clearResults() {
@@ -497,8 +511,8 @@ async function downloadFiltered() {
   if (!batchStore.currentTask || !uploadResult.value) return
   filterDownloadLoading.value = true
   try {
-    const name = uploadResult.value.filename.replace(/\.(xlsx|xls|json|txt)$/i, '')
-    await batchApi.filterDownload(batchStore.currentTask.id, { ...filter }, `${name}_筛选结果.xlsx`)
+    const title = batchStore.currentTask.title || uploadResult.value.filename.replace(/\.(xlsx|xls|json|txt)$/i, '')
+    await batchApi.filterDownload(batchStore.currentTask.id, { ...filter }, `${title}_筛选结果.xlsx`)
     message.success('下载完成')
   } catch (e: any) {
     message.warning(e.message || '下载失败')
@@ -683,7 +697,13 @@ watch([() => ({ ...config }), () => ({ ...filter })], () => {
   if (!batchStore.currentTask || !uploadResult.value) return
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(() => {
+    // Merge with existing config_json to preserve timing fields (batch_start_time, batch_elapsed_seconds)
+    const existing: Record<string, any> = {}
+    if (batchStore.currentTask?.config_json) {
+      try { Object.assign(existing, JSON.parse(batchStore.currentTask.config_json)) } catch { }
+    }
     batchStore.saveBatchTaskConfig(batchStore.currentTask!.id, {
+      ...existing,
       ...config,
       filter: { ...filter },
     })
@@ -699,6 +719,8 @@ watch(() => batchStore.currentTask, (task) => {
     progress.completed = 0
     progress.total = 0
     batchError.value = ''
+    startTime.value = 0
+    elapsedSeconds.value = 0
     resetConfig()
     resetFilter()
     return
@@ -706,6 +728,9 @@ watch(() => batchStore.currentTask, (task) => {
   if (task.config_json) {
     try {
       const saved = JSON.parse(task.config_json)
+      startTime.value = 0
+      elapsedSeconds.value = 0
+      resetConfig()
       if (saved.input_columns) {
         config.input_columns = saved.input_columns
       } else if (saved.input_column) {
@@ -717,8 +742,10 @@ watch(() => batchStore.currentTask, (task) => {
       if (saved.concurrency) config.concurrency = saved.concurrency
       if (typeof saved.strip_thinking === 'boolean') config.strip_thinking = saved.strip_thinking
       if (typeof saved.parse_json === 'boolean') config.parse_json = saved.parse_json
+      if (saved.batch_start_time) startTime.value = saved.batch_start_time
+      if (saved.batch_elapsed_seconds) elapsedSeconds.value = saved.batch_elapsed_seconds
+      resetFilter()
       if (saved.filter) {
-        resetFilter()
         filter.top_n = saved.filter.top_n ?? null
         filter.logic = saved.filter.logic || 'and'
         // Restore groups (new format) or convert old conditions+connector format
@@ -745,34 +772,32 @@ watch(() => batchStore.currentTask, (task) => {
             filterPreviewResult.value = r
           }).catch(() => {})
         }
-      } else {
-        resetFilter()
       }
     } catch { /* ignore parse errors */ }
   } else {
+    startTime.value = 0
+    elapsedSeconds.value = 0
     resetConfig()
     resetFilter()
   }
   if (task.status === 'running') {
-    if (runningTaskId.value === task.id) {
-      // Returning to the currently running task — restore state
+    if (runningResults.has(task.id)) {
+      // Returning to a running task that we started from this client — restore state
       running.value = true
       done.value = false
-      const saved = runningResults.get(task.id)
-      if (saved) {
-        clearResults()
-        results.value = [...saved]
-        // Rebuild parsedKeysSet from restored results
-        const keys = new Set<string>()
-        for (const r of saved) {
-          if (r.parsed) {
-            for (const k of Object.keys(r.parsed)) {
-              keys.add(k)
-            }
+      const saved = runningResults.get(task.id)!
+      clearResults()
+      results.value = [...saved]
+      // Rebuild parsedKeysSet from restored results
+      const keys = new Set<string>()
+      for (const r of saved) {
+        if (r.parsed) {
+          for (const k of Object.keys(r.parsed)) {
+            keys.add(k)
           }
         }
-        parsedKeysSet.value = keys
       }
+      parsedKeysSet.value = keys
       progress.completed = task.progress_completed
       progress.total = task.progress_total
     } else {
@@ -880,6 +905,7 @@ async function startBatch() {
   done.value = false
   batchError.value = ''
   startTime.value = Date.now()
+  elapsedSeconds.value = 0
   running.value = true
   runningTaskId.value = batchStore.currentTask!.id
   const myTaskId = batchStore.currentTask!.id
@@ -887,6 +913,7 @@ async function startBatch() {
   await batchStore.saveBatchTaskConfig(myTaskId, {
     ...config,
     filter: { ...filter },
+    batch_start_time: startTime.value,
   })
 
   // Track results per running task for restoration when switching back
@@ -930,8 +957,19 @@ async function startBatch() {
         runningTaskId.value = null
       }
       if (wasMyTask) {
+        elapsedSeconds.value = Math.round((Date.now() - startTime.value) / 1000)
         done.value = true
         running.value = false
+        // Persist elapsed time so it survives page refresh
+        const task = batchStore.currentTask
+        if (task?.config_json) {
+          try {
+            const cfg = JSON.parse(task.config_json)
+            cfg.batch_elapsed_seconds = elapsedSeconds.value
+            cfg.batch_start_time = startTime.value
+            batchStore.saveBatchTaskConfig(myTaskId, cfg)
+          } catch { /* ignore */ }
+        }
       }
     },
     (msg) => {
@@ -958,24 +996,34 @@ function stopBatch() {
       ctrl.abort()
       abortControllers.delete(taskId)
     }
+    runningResults.delete(taskId)
   }
   flushResults()
-  if (runningTaskId.value) {
-    runningResults.delete(runningTaskId.value)
-    runningTaskId.value = null
-  }
   running.value = false
 }
 
-function download() {
+async function download() {
   if (!uploadResult.value) return
-  const url = batchApi.downloadUrl(uploadResult.value.task_id)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = ''
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  try {
+    const url = batchApi.downloadUrl(uploadResult.value.task_id)
+    const resp = await authFetch(url, {})
+    if (!resp.ok) {
+      message.warning('下载失败')
+      return
+    }
+    const blob = await resp.blob()
+    const objUrl = URL.createObjectURL(blob)
+    const title = batchStore.currentTask?.title || uploadResult.value.filename.replace(/\.(xlsx|xls|json|txt)$/i, '')
+    const a = document.createElement('a')
+    a.href = objUrl
+    a.download = `${title}_结果.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(objUrl)
+  } catch {
+    message.warning('下载失败')
+  }
 }
 </script>
 
