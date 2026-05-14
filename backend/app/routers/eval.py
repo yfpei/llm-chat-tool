@@ -79,20 +79,19 @@ async def run_llm_scoring_eval(
     task.eval_config_json = json.dumps(existing, ensure_ascii=False)
     await db.commit()
 
-    async def event_stream():
+    async def event_generator():
         async for event in eval_service.run_llm_scoring(
             db, task.file_id, body.config.api_key_id,
-            body.config.score_column, body.config.prompt,
+            body.config.prompt,
             body.config.output_column_name, body.config.concurrency,
             input_columns=body.config.input_columns,
         ):
-            t = event.get("type", "error")
-            if t == "error":
-                yield f"event: error\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-                return
-            yield f"event: {t}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+            yield {
+                "event": "message",
+                "data": json.dumps(event, ensure_ascii=False),
+            }
 
-    return EventSourceResponse(event_stream())
+    return EventSourceResponse(event_generator())
 
 
 @router.get("/{task_id}/classification-result")
@@ -104,10 +103,25 @@ async def get_classification_result(
     task = await db.get(BatchTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    result = eval_service.get_classification_eval_file(task.file_id)
+    result = eval_service.get_classification_result_json(task.file_id)
     if not result:
         raise HTTPException(status_code=404, detail="评测结果不存在，请先执行客观评测")
-    return {"has_result": True}
+    return result
+
+
+@router.get("/{task_id}/llm-scoring-result")
+async def get_llm_scoring_result(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    task = await db.get(BatchTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    result = eval_service.get_llm_scoring_result(task.file_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="评分结果不存在，请先执行主观评测")
+    return result
 
 
 @router.get("/{task_id}/classification-download")
