@@ -77,7 +77,7 @@ import { useBatchStore } from '../stores/batch'
 import * as batchApi from '../api/batch'
 import * as batchTasksApi from '../api/batchTasks'
 import EvalPanel from '../components/EvalPanel.vue'
-import type { UploadResponse, BatchTask } from '../types'
+import type { BatchTask } from '../types'
 
 const batchStore = useBatchStore()
 const message = useMessage()

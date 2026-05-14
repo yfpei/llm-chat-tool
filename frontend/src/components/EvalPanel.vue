@@ -332,9 +332,9 @@ const columns = computed(() => props.columns || internalColumns.value)
 const taskId = computed(() => propsTaskId.value || selectedTaskId.value)
 
 const taskOptions = computed(() =>
-  batchStore.tasks
-    .filter(t => t.status === 'completed')
-    .map(t => ({ label: t.title, value: t.id }))
+  batchStore.batchTasks
+    .filter((t: BatchTask) => t.status === 'completed')
+    .map((t: BatchTask) => ({ label: t.title, value: t.id }))
 )
 
 const activeTab = ref<'classification' | 'llm_scoring'>('classification')
@@ -387,14 +387,19 @@ async function loadDataPreview(tid: string) {
   }
 }
 
+interface PreviewRow {
+  row: number
+  cells: Record<string, string>
+}
+
 const dataPreviewColumns = computed(() =>
   dataPreviewHeaders.value.map(h => ({
     title: h,
     key: `cells.${h}`,
     width: 150,
     ellipsis: { tooltip: true },
-    render(row: Record<string, unknown>) {
-      return row.cells?.[h] != null ? String(row.cells[h]) : ''
+    render(row: PreviewRow) {
+      return row.cells[h] != null ? String(row.cells[h]) : ''
     },
   }))
 )
@@ -636,7 +641,11 @@ async function loadExistingResults(tid: string) {
 
     const llmData = await evalApi.getLLMScoringResult(tid)
     if (llmData) {
-      llmScores.value = llmData.scores
+      llmScores.value = llmData.scores.map((s: { row: number; score: string; status: string }) => ({
+        row: s.row,
+        score: s.score,
+        status: (s.status === 'success' ? 'success' : 'error') as 'success' | 'error',
+      }))
       llmAvgScore.value = llmData.avg_score
       llmProgress.completed = llmData.total
       llmProgress.total = llmData.total
@@ -735,7 +744,7 @@ async function runLLMScoring() {
         error,
       })
     },
-    (total, avgScore) => {
+    (_total, avgScore) => {
       llmScoringDone.value = true
       llmAvgScore.value = avgScore
       llmRunning.value = false
