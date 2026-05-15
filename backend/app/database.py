@@ -20,7 +20,7 @@ async def init_db():
     from sqlalchemy import text
 
     async with engine.begin() as conn:
-        from app.models import User, ApiKey, UserKeyOverride, Conversation, Message, BatchTask, EsExportTask  # noqa: F401
+        from app.models import User, ApiKey, UserKeyOverride, Conversation, Message, BatchTask, EsExportTask, MySQLExportTask  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
 
         # --- Migrations for existing databases ---
@@ -64,5 +64,17 @@ async def init_db():
         # Add eval_config_json column
         try:
             await conn.execute(text("ALTER TABLE batch_tasks ADD COLUMN eval_config_json TEXT"))
+        except Exception:
+            pass
+
+        # Add source column
+        try:
+            await conn.execute(text("ALTER TABLE batch_tasks ADD COLUMN source VARCHAR(20) DEFAULT 'batch'"))
+        except Exception:
+            pass
+
+        # Add user_id to mysql_export_tasks
+        try:
+            await conn.execute(text("ALTER TABLE mysql_export_tasks ADD COLUMN user_id INTEGER REFERENCES users(id)"))
         except Exception:
             pass

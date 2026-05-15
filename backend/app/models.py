@@ -22,6 +22,7 @@ class User(Base):
     conversations = relationship("Conversation", back_populates="user")
     batch_tasks = relationship("BatchTask", back_populates="user")
     es_export_tasks = relationship("EsExportTask", back_populates="user")
+    mysql_export_tasks = relationship("MySQLExportTask", back_populates="user")
     key_overrides = relationship("UserKeyOverride", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -102,6 +103,7 @@ class BatchTask(Base):
     status = Column(String(20), default="uploaded")
     config_json = Column(Text, nullable=True)
     eval_config_json = Column(Text, nullable=True)
+    source = Column(String(20), default="batch")  # "batch" | "eval"
     progress_completed = Column(Integer, default=0)
     progress_total = Column(Integer, default=0)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -132,3 +134,29 @@ class EsExportTask(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="es_export_tasks")
+
+
+class MySQLExportTask(Base):
+    __tablename__ = "mysql_export_tasks"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(200), default="未命名MySQL导出")
+    mysql_host = Column(String(500), nullable=False)
+    mysql_port = Column(Integer, default=3306)
+    mysql_username = Column(String(100), nullable=True)
+    mysql_password = Column(Text, nullable=True)
+    database_name = Column(String(200), nullable=True)
+    table_name = Column(String(200), nullable=True)
+    where_clause = Column(Text, nullable=True)
+    custom_sql = Column(Text, nullable=True)
+    output_columns = Column(Text, nullable=True)
+    status = Column(String(20), default="created")
+    total_rows = Column(Integer, default=0)
+    exported_count = Column(Integer, default=0)
+    file_id = Column(String(36), nullable=True)
+    config_json = Column(Text, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="mysql_export_tasks")

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.database import init_db
-from app.routers import keys, conversations, chat, batch, batch_tasks, es_export, auth, users, eval
+from app.routers import keys, conversations, chat, batch, batch_tasks, es_export, mysql_export, auth, users, eval
 
 logging.basicConfig(level=logging.INFO)
 
@@ -44,6 +44,7 @@ app.include_router(chat.router)
 app.include_router(batch.router)
 app.include_router(batch_tasks.router)
 app.include_router(es_export.router)
+app.include_router(mysql_export.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(eval.router)

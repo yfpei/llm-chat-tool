@@ -41,6 +41,7 @@ def _text_to_excel(file_path: str, info: dict):
 async def upload_excel(
     file: UploadFile = File(...),
     task_id: str = Form(default=""),
+    source: str = Form(default="batch"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -125,6 +126,7 @@ async def upload_excel(
         headers=json.dumps(info["headers"], ensure_ascii=False),
         total_rows=info["total_rows"],
         user_id=current_user.id,
+        source=source,
     )
     db.add(task)
     await db.commit()

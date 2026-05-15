@@ -42,7 +42,7 @@
     <!-- Batch mode: batch tasks -->
     <template v-else-if="view === 'batch'">
       <div
-        v-for="task in batchStore.batchTasks"
+        v-for="task in batchStore.batchTasks.filter(t => t.source !== 'eval')"
         :key="task.id"
         :class="['session-item', { active: batchStore.currentTask?.id === task.id }]"
         @click="handleTaskClick(task)"
@@ -75,31 +75,76 @@
       </div>
     </template>
 
-    <!-- ES Export mode: export tasks -->
-    <template v-else-if="view === 'es-export'">
+    <!-- Eval mode: eval tasks -->
+    <template v-else-if="view === 'eval'">
       <div
-        v-for="task in esExportStore.tasks"
+        v-for="task in batchStore.batchTasks.filter(t => t.source === 'eval')"
         :key="task.id"
-        :class="['session-item', { active: esExportStore.currentTask?.id === task.id }]"
-        @click="handleEsTaskClick(task)"
+        :class="['session-item', { active: batchStore.currentTask?.id === task.id }]"
+        @click="handleTaskClick(task)"
       >
         <div class="session-content">
           <div class="session-icon">
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <rect x="1.5" y="1" width="12" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M4 5.5h7M4 8h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              <rect x="4" y="12" width="7" height="2" rx="0.5" stroke="currentColor" stroke-width="1"/>
+              <rect x="2" y="13.5" width="11" height="1" rx="0.3" stroke="currentColor" stroke-width="0.8"/>
+            </svg>
+          </div>
+          <span v-if="editingTaskId !== task.id" class="session-title">{{ task.title }}</span>
+          <n-input v-else
+                   size="tiny"
+                   v-model:value="editTaskTitle"
+                   @blur="finishEditTask(task.id)"
+                   @keyup.enter="finishEditTask(task.id)"
+                   @click.stop />
+        </div>
+        <n-popconfirm @positive-click="batchStore.removeBatchTask(task.id)">
+          <template #trigger>
+            <button class="delete-btn" @click.stop title="删除">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M3 4h8M5.5 4V3a1 1 0 011-1h1a1 1 0 011 1v1M11 4v7.5a1 1 0 01-1 1H4a1 1 0 01-1-1V4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </template>
+          确认删除此任务？
+        </n-popconfirm>
+      </div>
+    </template>
+
+    <!-- Export mode: both ES and MySQL tasks -->
+    <template v-else-if="view === 'export'">
+      <div
+        v-for="task in exportTasks"
+        :key="task._type + task.id"
+        :class="['session-item', { active: isExportTaskActive(task) }]"
+        @click="handleExportTaskClick(task)"
+      >
+        <div class="session-content">
+          <div class="session-icon" :class="task._type">
+            <svg v-if="task._type === 'es'" width="15" height="15" viewBox="0 0 15 15" fill="none">
               <ellipse cx="7.5" cy="5" rx="5.5" ry="2.5" stroke="currentColor" stroke-width="1.2"/>
               <path d="M2 5v5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V5" stroke="currentColor" stroke-width="1.2"/>
               <path d="M2 7.5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5" stroke="currentColor" stroke-width="1.2"/>
             </svg>
+            <svg v-else width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M3 5h9M3 8h9M3 11h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            </svg>
           </div>
-          <span v-if="editingEsTaskId !== task.id" class="session-title">{{ task.title }}</span>
+          <span v-if="editingExportTaskId !== task._type + task.id" class="session-title">
+            <span class="task-type-tag">{{ task._type === 'es' ? 'ES' : 'MySQL' }}</span>
+            {{ task.title }}
+          </span>
           <n-input v-else
                    size="tiny"
-                   v-model:value="editEsTaskTitle"
-                   @blur="finishEditEsTask(task.id)"
-                   @keyup.enter="finishEditEsTask(task.id)"
+                   v-model:value="editExportTaskTitle"
+                   @blur="finishEditExportTask(task)"
+                   @keyup.enter="finishEditExportTask(task)"
                    @click.stop />
         </div>
-        <n-popconfirm @positive-click="esExportStore.removeTask(task.id)">
+        <n-popconfirm @positive-click="removeExportTask(task)">
           <template #trigger>
             <button class="delete-btn" @click.stop title="删除">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -115,12 +160,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { NPopconfirm, NInput } from 'naive-ui'
 import { useChatStore } from '../stores/chat'
 import { useBatchStore } from '../stores/batch'
 import { useEsExportStore } from '../stores/esExport'
-import type { BatchTask, Conversation, EsExportTask } from '../types'
+import { useMySQLExportStore } from '../stores/mysqlExport'
+import type { BatchTask, Conversation } from '../types'
 
 defineProps<{
   view: string
@@ -129,6 +175,7 @@ defineProps<{
 const store = useChatStore()
 const batchStore = useBatchStore()
 const esExportStore = useEsExportStore()
+const mysqlExportStore = useMySQLExportStore()
 
 // ── Conversation rename ──────────────────────
 const editingConvId = ref<string | null>(null)
@@ -184,31 +231,73 @@ async function finishEditTask(taskId: string) {
   editingTaskId.value = null
 }
 
-// ── ES Export task rename ────────────────────
-const editingEsTaskId = ref<string | null>(null)
-const editEsTaskTitle = ref('')
+// ── Export tasks (ES + MySQL combined) ────────
+interface ExportTaskItem {
+  _type: 'es' | 'mysql'
+  id: string
+  title: string
+  created_at?: string | null
+}
 
-function handleEsTaskClick(task: EsExportTask) {
-  if (editingEsTaskId.value) return
-  if (esExportStore.currentTask?.id === task.id) {
-    editingEsTaskId.value = task.id
-    editEsTaskTitle.value = task.title
+const editingExportTaskId = ref<string | null>(null)
+const editExportTaskTitle = ref('')
+
+const exportTasks = computed<ExportTaskItem[]>(() => {
+  const items: ExportTaskItem[] = [
+    ...esExportStore.tasks.map(t => ({ _type: 'es' as const, id: t.id, title: t.title, created_at: t.created_at })),
+    ...mysqlExportStore.tasks.map(t => ({ _type: 'mysql' as const, id: t.id, title: t.title, created_at: t.created_at })),
+  ]
+  items.sort((a, b) => {
+    const da = a.created_at || ''
+    const db = b.created_at || ''
+    return db.localeCompare(da) // newest first
+  })
+  return items
+})
+
+function isExportTaskActive(task: ExportTaskItem): boolean {
+  if (task._type === 'es') return esExportStore.currentTask?.id === task.id
+  return mysqlExportStore.currentTask?.id === task.id
+}
+
+function handleExportTaskClick(task: ExportTaskItem) {
+  if (editingExportTaskId.value) return
+  const store = task._type === 'es' ? esExportStore : mysqlExportStore
+  if (store.currentTask?.id === task.id) {
+    editingExportTaskId.value = task._type + task.id
+    editExportTaskTitle.value = task.title
     nextTick(() => {
       const inp = document.querySelector<HTMLInputElement>('.session-item.active input')
       inp?.focus()
       inp?.select()
     })
   } else {
-    esExportStore.selectTask(task.id)
+    if (task._type === 'es') {
+      esExportStore.selectTask(task.id)
+    } else {
+      mysqlExportStore.selectTask(task.id)
+    }
   }
 }
 
-async function finishEditEsTask(taskId: string) {
-  const newTitle = editEsTaskTitle.value.trim()
+async function finishEditExportTask(task: ExportTaskItem) {
+  const newTitle = editExportTaskTitle.value.trim()
   if (newTitle) {
-    await esExportStore.renameTask(taskId, newTitle)
+    if (task._type === 'es') {
+      await esExportStore.renameTask(task.id, newTitle)
+    } else {
+      await mysqlExportStore.renameTask(task.id, newTitle)
+    }
   }
-  editingEsTaskId.value = null
+  editingExportTaskId.value = null
+}
+
+function removeExportTask(task: ExportTaskItem) {
+  if (task._type === 'es') {
+    esExportStore.removeTask(task.id)
+  } else {
+    mysqlExportStore.removeTask(task.id)
+  }
 }
 </script>
 
@@ -280,6 +369,18 @@ async function finishEditEsTask(taskId: string) {
   white-space: nowrap;
   font-size: 13.5px;
   line-height: 1.4;
+}
+
+.task-type-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 4px;
+  border-radius: 3px;
+  margin-right: 4px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  vertical-align: middle;
 }
 
 .delete-btn {

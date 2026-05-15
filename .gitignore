@@ -12,3 +12,4 @@ venv/
 *.tar.gz
 backend/uploads/
 .claude/
+.superpowers/

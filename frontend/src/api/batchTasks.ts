@@ -15,7 +15,7 @@ export async function getBatchTask(id: string): Promise<BatchTask> {
 
 export async function updateBatchTask(
   id: string,
-  data: { title?: string; config_json?: string; status?: string; progress_completed?: number; progress_total?: number }
+  data: { title?: string; config_json?: string; eval_config_json?: string; status?: string; progress_completed?: number; progress_total?: number }
 ): Promise<BatchTask> {
   const res = await authFetch(`${BASE}/${id}`, {
     method: 'PUT',
@@ -36,5 +36,16 @@ export async function getTaskPreview(id: string): Promise<{ columns: string[]; h
 
 export async function getTaskResults(id: string): Promise<{ row: number; input: string; output: string; status: string }[]> {
   const res = await authFetch(`${BASE}/${id}/results`)
+  return res.json()
+}
+
+export async function createEvalFromBatch(batchTaskId: string): Promise<BatchTask> {
+  const res = await authFetch(`${BASE}/${batchTaskId}/create-eval`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.detail || '创建评测任务失败')
+  }
   return res.json()
 }

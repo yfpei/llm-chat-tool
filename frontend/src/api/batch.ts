@@ -1,10 +1,11 @@
 import type { UploadResponse, BatchRunConfig, BatchEvent } from '../types'
 import { authFetch } from './client'
 
-export async function uploadExcel(file: File, taskId?: string): Promise<UploadResponse> {
+export async function uploadExcel(file: File, taskId?: string, source?: string): Promise<UploadResponse> {
   const form = new FormData()
   form.append('file', file)
   if (taskId) form.append('task_id', taskId)
+  if (source) form.append('source', source)
   const res = await authFetch('/api/batch/upload', { method: 'POST', body: form })
   if (!res.ok) {
     const err = await res.json()

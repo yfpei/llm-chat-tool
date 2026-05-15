@@ -218,6 +218,8 @@ class BatchTaskResponse(BaseModel):
     total_rows: int
     status: str
     config_json: Optional[str] = None
+    eval_config_json: Optional[str] = None
+    source: str = "batch"
     progress_completed: int
     progress_total: int
     created_at: datetime
@@ -280,6 +282,72 @@ class EsExportRequest(BaseModel):
     top_n: Optional[int] = None
 
 
+# --- MySQL Export Schemas ---
+class MySQLExportTaskCreate(BaseModel):
+    title: str = "未命名MySQL导出"
+    mysql_host: str
+    mysql_port: int = 3306
+    mysql_username: Optional[str] = None
+    mysql_password: Optional[str] = None
+
+
+class MySQLExportTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    mysql_host: Optional[str] = None
+    mysql_port: Optional[int] = None
+    mysql_username: Optional[str] = None
+    mysql_password: Optional[str] = None
+    database_name: Optional[str] = None
+    table_name: Optional[str] = None
+    where_clause: Optional[str] = None
+    custom_sql: Optional[str] = None
+    output_columns: Optional[str] = None
+    config_json: Optional[str] = None
+
+
+class MySQLExportTaskResponse(BaseModel):
+    id: str
+    title: str
+    mysql_host: str
+    mysql_port: int
+    mysql_username: Optional[str] = None
+    database_name: Optional[str] = None
+    table_name: Optional[str] = None
+    where_clause: Optional[str] = None
+    custom_sql: Optional[str] = None
+    output_columns: Optional[str] = None
+    status: str
+    total_rows: int
+    exported_count: int
+    file_id: Optional[str] = None
+    config_json: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MySQLPreviewRequest(BaseModel):
+    database_name: Optional[str] = None
+    table_name: Optional[str] = None
+    where_clause: Optional[str] = None
+    custom_sql: Optional[str] = None
+    output_columns: Optional[list[str]] = None
+    page: int = 1
+    page_size: int = 50
+    top_n: Optional[int] = None
+
+
+class MySQLExportRequest(BaseModel):
+    database_name: Optional[str] = None
+    table_name: Optional[str] = None
+    where_clause: Optional[str] = None
+    custom_sql: Optional[str] = None
+    output_columns: Optional[list[str]] = None
+    top_n: Optional[int] = None
+
+
 # --- Eval Schemas ---
 
 class MappingRule(BaseModel):
@@ -297,7 +365,6 @@ class LLMScoringEvalConfig(BaseModel):
     api_key_id: int
     prompt: str
     input_columns: list[str] = []
-    score_column: str
     output_column_name: str = "评分"
     concurrency: int = 3
 

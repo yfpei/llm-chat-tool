@@ -18,7 +18,7 @@
                   <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
               </template>
-              {{ currentView === 'batch' ? '新任务' : currentView === 'eval' ? '新评测' : currentView === 'es-export' ? '新导出' : '新对话' }}
+              {{ currentView === 'batch' ? '新任务' : currentView === 'eval' ? '新评测' : currentView === 'export' ? '新导出' : '新对话' }}
             </n-button>
           </div>
 
@@ -44,7 +44,7 @@
               </svg>
               评测
             </button>
-            <button :class="['nav-item', { active: currentView === 'es-export' }]" @click="navigateTo('es-export')">
+            <button :class="['nav-item', { active: currentView === 'export' }]" @click="navigateTo('export')">
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                 <ellipse cx="7.5" cy="5" rx="5.5" ry="2.5" stroke="currentColor" stroke-width="1.2"/>
                 <path d="M2 5v5c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V5" stroke="currentColor" stroke-width="1.2"/>
@@ -88,6 +88,7 @@ import { NConfigProvider, NMessageProvider, NButton, NDropdown, NTag } from 'nai
 import { useChatStore } from './stores/chat'
 import { useBatchStore } from './stores/batch'
 import { useEsExportStore } from './stores/esExport'
+import { useMySQLExportStore } from './stores/mysqlExport'
 import { useAuthStore } from './stores/auth'
 import SessionList from './components/SessionList.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
@@ -95,6 +96,7 @@ import SettingsPanel from './components/SettingsPanel.vue'
 const store = useChatStore()
 const batchStore = useBatchStore()
 const esExportStore = useEsExportStore()
+const mysqlExportStore = useMySQLExportStore()
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
@@ -104,8 +106,10 @@ const currentView = computed(() => route.name as string)
 function handleNewChat() {
   if (currentView.value === 'batch' || currentView.value === 'eval') {
     batchStore.newBatchTask()
-  } else if (currentView.value === 'es-export') {
+  } else if (currentView.value === 'export') {
+    // Clear both export stores for a fresh start
     esExportStore.newTask()
+    mysqlExportStore.newTask()
   } else {
     store.newConversation()
   }
@@ -166,14 +170,14 @@ const themeOverrides = {
 
 onMounted(async () => {
   if (auth.isLoggedIn) {
-    await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks(), esExportStore.loadTasks()])
+    await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks(), esExportStore.loadTasks(), mysqlExportStore.loadTasks()])
   }
 })
 
 // Load data when user logs in (App.vue stays mounted across route changes)
 watch(() => auth.isLoggedIn, async (loggedIn) => {
   if (loggedIn) {
-    await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks(), esExportStore.loadTasks()])
+    await Promise.all([store.loadKeys(), store.loadConversations(), batchStore.loadBatchTasks(), esExportStore.loadTasks(), mysqlExportStore.loadTasks()])
   }
 })
 </script>

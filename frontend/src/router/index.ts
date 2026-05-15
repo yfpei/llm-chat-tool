@@ -52,9 +52,9 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/es-export',
-      name: 'es-export',
-      component: () => import('../views/EsExportPage.vue'),
+      path: '/export',
+      name: 'export',
+      component: () => import('../views/ExportPage.vue'),
       meta: { requiresAuth: true },
     },
     {

@@ -163,10 +163,10 @@ const sharedKeys = computed(() => store.apiKeys.filter(k => k.user_id === null |
 const myKeys = computed(() => store.apiKeys.filter(k => k.user_id !== null && k.user_id !== undefined))
 
 const modelTypeOptions = [
-  { label: 'X1 (星火)', value: 'x1' },
+  { label: 'X1', value: 'x1' },
   { label: 'DeepSeek', value: 'deepseek' },
-  { label: 'Qwen (通义千问)', value: 'qwen' },
-  { label: 'Others', value: 'others' },
+  { label: 'Qwen', value: 'qwen' },
+  { label: 'Others(不一定生效)', value: 'others' },
 ]
 
 const providerOptions = [

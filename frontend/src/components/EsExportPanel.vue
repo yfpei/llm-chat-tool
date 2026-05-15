@@ -1,9 +1,5 @@
 <template>
   <div class="es-panel">
-    <div class="es-header">
-      <h2>ES 数据导出</h2>
-    </div>
-
     <div class="es-body">
       <!-- Step 1: Connection -->
       <div class="step">
@@ -214,6 +210,7 @@ import {
 } from 'naive-ui'
 import { useEsExportStore } from '../stores/esExport'
 import * as esExportApi from '../api/esExport'
+import { authFetch } from '../api/client'
 
 const store = useEsExportStore()
 const message = useMessage()
@@ -420,6 +417,7 @@ async function handleTestConnection() {
 
 function disconnect() {
   connected.value = false
+  esVersion.value = ''
   selectedIndex.value = null
   fieldMapping.value = {}
   selectedFields.value = []
@@ -542,7 +540,7 @@ async function handleDownload() {
   abortController = new AbortController()
 
   try {
-    const response = await fetch(esExportApi.getExportUrl(store.currentTask.id), {
+    const response = await authFetch(esExportApi.getExportUrl(store.currentTask.id), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -581,6 +579,8 @@ async function handleDownload() {
               exportDone.value = true
             } else if (event.type === 'error') {
               downloadError.value = event.content || '导出失败'
+              downloadProgress.completed = 0
+              downloadProgress.total = 0
               downloading.value = false
             }
           } catch { /* skip */ }
@@ -605,7 +605,7 @@ function stopDownload() {
 
 async function triggerFileDownload(fileId: string) {
   const url = esExportApi.getFileDownloadUrl(fileId)
-  const response = await fetch(url)
+  const response = await authFetch(url)
   if (!response.ok) {
     const err = await response.json().catch(() => ({ detail: '下载失败' }))
     throw new Error(err.detail || '下载失败')
@@ -693,28 +693,12 @@ watch(() => store.currentTask, (task) => {
 
 <style scoped>
 .es-panel {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: #f5f5f7;
   overflow: hidden;
-}
-
-.es-header {
-  padding: 0 24px;
-  height: 52px;
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,0.7);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(0,0,0,0.06);
-  flex-shrink: 0;
-}
-
-.es-header h2 {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1a1a2e;
 }
 
 .es-body {
