@@ -1,5 +1,7 @@
 import json
 import os
+import shutil
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -164,10 +166,61 @@ async def delete_batch_task(
 ):
     task = await db.get(BatchTask, task_id)
     _verify_ownership(task, current_user)
-    for suffix in (".xlsx", "_original.xlsx", "_result.xlsx"):
+    suffixes = [".xlsx", "_original.xlsx", "_result.xlsx"]
+    if task.source == "eval":
+        suffixes += ["_eval_classification.xlsx", "_eval_classification.json",
+                     "_eval_llm_scoring.xlsx"]
+    for suffix in suffixes:
         p = os.path.join(UPLOAD_DIR, f"{task.file_id}{suffix}")
         if os.path.exists(p):
             os.remove(p)
     await db.delete(task)
     await db.commit()
     return {"message": "deleted"}
+
+
+@router.post("/{task_id}/create-eval", response_model=BatchTaskResponse)
+async def create_eval_from_batch(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create an independent eval task from a batch task's result file."""
+    task = await db.get(BatchTask, task_id)
+    _verify_ownership(task, current_user)
+
+    if task.source != "batch":
+        raise HTTPException(status_code=400, detail="只能从跑批任务创建评测任务")
+
+    if task.status != "completed":
+        raise HTTPException(status_code=400, detail="跑批任务未完成")
+
+    # Find the result file
+    source_path = _resolve_file_path(task.file_id)
+    if not os.path.exists(source_path):
+        raise HTTPException(status_code=404, detail="结果文件不存在")
+
+    # Create new file_id and copy the file
+    new_file_id = str(uuid.uuid4())
+    new_xlsx_path = os.path.join(UPLOAD_DIR, f"{new_file_id}.xlsx")
+    shutil.copy(source_path, new_xlsx_path)
+
+    # Also copy original for reference
+    shutil.copy(new_xlsx_path, new_xlsx_path.replace(".xlsx", "_original.xlsx"))
+
+    # Create new eval task
+    new_task = BatchTask(
+        title=f"{task.title} - 评测",
+        file_id=new_file_id,
+        filename=task.filename,
+        columns=task.columns,
+        headers=task.headers,
+        total_rows=task.total_rows,
+        user_id=current_user.id,
+        source="eval",
+        status="uploaded",
+    )
+    db.add(new_task)
+    await db.commit()
+    await db.refresh(new_task)
+    return new_task

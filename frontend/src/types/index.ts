@@ -148,6 +148,7 @@ export interface BatchTask {
   status: 'uploaded' | 'running' | 'completed' | 'failed'
   config_json: string | null
   eval_config_json: string | null
+  source: 'batch' | 'eval'
   progress_completed: number
   progress_total: number
   created_at: string
@@ -171,7 +172,6 @@ export interface LLMScoringEvalConfig {
   api_key_id: number
   prompt: string
   input_columns: string[]
-  score_column: string
   output_column_name: string
   concurrency: number
 }
@@ -185,9 +185,9 @@ export interface EvalConfigData {
 
 export interface PerClassMetric {
   class_name: string
-  precision: number
-  recall: number
-  f1: number
+  precision: number | null
+  recall: number | null
+  f1: number | null
 }
 
 export interface AvgMetric {
@@ -239,6 +239,34 @@ export interface EsExportTask {
 }
 
 export interface EsPreviewResult {
+  total: number
+  rows: Record<string, unknown>[]
+  fields: string[]
+}
+
+// ── MySQL Export Types ──────────────────────
+
+export interface MySQLExportTask {
+  id: string
+  title: string
+  mysql_host: string
+  mysql_port: number
+  mysql_username?: string | null
+  database_name?: string | null
+  table_name?: string | null
+  where_clause?: string | null
+  custom_sql?: string | null
+  output_columns?: string | null
+  status: 'created' | 'running' | 'completed' | 'failed'
+  total_rows: number
+  exported_count: number
+  file_id?: string | null
+  config_json?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface MySQLPreviewResult {
   total: number
   rows: Record<string, unknown>[]
   fields: string[]

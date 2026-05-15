@@ -126,7 +126,10 @@
             <table class="cm-table">
               <thead>
                 <tr>
-                  <th class="cm-corner"><div class="cm-diag"><span class="cm-actual">实际值</span><span class="cm-predict">预测值</span></div></th>
+                  <th rowspan="2" class="cm-actual-h">真实值</th>
+                  <th :colspan="classResult.labels.length + 1" class="cm-predict-h">预测值</th>
+                </tr>
+                <tr>
                   <th v-for="l in classResult.labels" :key="l" class="cm-col-h">{{ l }}</th>
                   <th class="cm-col-sum">合计</th>
                 </tr>
@@ -789,18 +792,20 @@ async function downloadLLMScoring() {
 
 // ── Table columns ──
 
+const fmtMetric = (v: number | null) => v != null ? v.toFixed(4) : '-'
+
 const perClassColumns = [
   { title: '分类', key: 'class_name' },
-  { title: 'Precision', key: 'precision' },
-  { title: 'Recall', key: 'recall' },
-  { title: 'F1 Score', key: 'f1' },
+  { title: 'Precision', key: 'precision', render: (row: any) => fmtMetric(row.precision) },
+  { title: 'Recall', key: 'recall', render: (row: any) => fmtMetric(row.recall) },
+  { title: 'F1 Score', key: 'f1', render: (row: any) => fmtMetric(row.f1) },
 ]
 
 const avgColumns = [
   { title: '类型', key: 'type' },
-  { title: 'Precision', key: 'precision' },
-  { title: 'Recall', key: 'recall' },
-  { title: 'F1 Score', key: 'f1' },
+  { title: 'Precision', key: 'precision', render: (row: any) => fmtMetric(row.precision) },
+  { title: 'Recall', key: 'recall', render: (row: any) => fmtMetric(row.recall) },
+  { title: 'F1 Score', key: 'f1', render: (row: any) => fmtMetric(row.f1) },
 ]
 
 const avgRows = computed(() => {
@@ -1119,30 +1124,19 @@ watch([propsTaskId, () => props.columns], async ([tid, cols]) => {
   text-align: center;
 }
 
-.cm-corner {
-  background: #f8f9fc;
+.cm-actual-h {
+  background: #f0f2f8;
+  font-weight: 600;
+  color: #4b5563;
   width: 80px;
+  vertical-align: middle;
 }
 
-.cm-diag {
-  position: relative;
-  height: 40px;
-}
-
-.cm-actual {
-  position: absolute;
-  top: 2px;
-  left: 6px;
-  font-size: 10px;
-  color: #9ca3af;
-}
-
-.cm-predict {
-  position: absolute;
-  bottom: 2px;
-  right: 6px;
-  font-size: 10px;
-  color: #9ca3af;
+.cm-predict-h {
+  background: #f0f2f8;
+  font-weight: 600;
+  color: #4b5563;
+  padding: 6px 12px;
 }
 
 .cm-col-h, .cm-row-h {

@@ -16,7 +16,10 @@ RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r re
 COPY backend/ ./
 
 # Remove files that should not be in the image
-RUN rm -f .env *.db && rm -rf uploads/*
+RUN rm -f .env *.db && rm -rf uploads/* && \
+    pip uninstall -y pytest pytest-asyncio 2>/dev/null; \
+    find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; \
+    find . -type f -name '*.pyc' -delete 2>/dev/null
 
 # Copy built frontend static files
 COPY --from=frontend-build /app/frontend/dist/ /app/static/

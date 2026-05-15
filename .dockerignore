@@ -16,3 +16,13 @@ backend/uploads/
 docs/
 data/
 .claude/
+.superpowers/
+
+# Build artifacts and large files
+*.tar.gz
+
+# IDE / editor config
+.vscode/
+
+# Pytest cache variants
+pytest-cache-files-*/
